@@ -1,0 +1,9 @@
+# Netlify build settings. Production deploys only ever happen by pushing to
+# main — never deploy manually. VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+# must be set as environment variables in the Netlify site settings.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
