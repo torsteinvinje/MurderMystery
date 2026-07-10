@@ -628,3 +628,42 @@ details.editor summary:hover { color: var(--text); }
 details.editor label { margin-top: 10px; }
 
 hr.divider { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+
+/* --- Auth screens ---------------------------------------------------------- */
+.hint { font-size: 13.5px; color: var(--text-faint); margin: 6px 0 0; }
+
+.notice-ok {
+  background: var(--ok-soft);
+  border: 1px solid #bfe3cd;
+  border-radius: var(--radius-sm);
+  color: var(--ok);
+  padding: 11px 14px;
+  margin: 12px 0;
+  font-size: 15px;
+}
+
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+/* Link-styled buttons: keyboard-focusable real buttons that read as links. */
+.linkish {
+  margin: 0;
+  padding: 4px 0;
+  background: none;
+  border: none;
+  color: var(--accent-strong);
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.linkish:hover { filter: none; text-decoration: underline; }
+.linkish:focus-visible {
+  outline: 3px solid rgba(194, 36, 50, 0.45);
+  outline-offset: 2px;
+  border-radius: 3px;
+}

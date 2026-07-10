@@ -31,6 +31,7 @@ export function topNav({ active = '', newFestInPage = false } = {}) {
         ${link('/host.html', 'host', I.host, 'Vertskontroll')}
         ${link('/studio.html', 'studio', I.studio, 'Verkstedet')}
         ${link('/', 'player', I.guests, 'Til festen')}
+        ${link('/konto.html', 'konto', I.account, 'Konto')}
         ${cta}
       </div>
     </nav>`

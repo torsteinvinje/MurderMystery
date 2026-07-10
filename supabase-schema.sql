@@ -138,6 +138,13 @@ create table if not exists mystery_polaroids (
 alter table games add column if not exists
   mystery_id uuid references mysteries (id) on delete set null;
 
+-- Eierskap: når en INNLOGGET vert lager noe, knyttes det til kontoen (nullbart,
+-- så anonyme verter fungerer som før). Se seksjon 11 (auth) nederst.
+alter table games     add column if not exists owner_id uuid references auth.users (id) on delete set null;
+alter table mysteries add column if not exists owner_id uuid references auth.users (id) on delete set null;
+create index if not exists games_owner_idx     on games (owner_id);
+create index if not exists mysteries_owner_idx on mysteries (owner_id);
+
 -- Gamle mal-tabeller fra første versjon av skjemaet (erstattet av mysteries).
 drop table if exists suspect_templates;
 drop table if exists polaroid_templates;
@@ -369,8 +376,8 @@ begin
 
   -- Innholdet KOPIERES inn i spillet: verten kan redigere fritt underveis
   -- uten å endre mysteriet, og mysteriet kan slettes uten å knekke fester.
-  insert into games (code, mystery_id, title, intro, resolution)
-  values (v_code, v_mystery.id, v_mystery.title, v_mystery.intro, v_mystery.resolution)
+  insert into games (code, mystery_id, title, intro, resolution, owner_id)
+  values (v_code, v_mystery.id, v_mystery.title, v_mystery.intro, v_mystery.resolution, auth.uid())
   returning * into v_game;
 
   insert into suspects (game_id, sort_order, name, tagline, public_info, secret, alibi, is_killer)
@@ -971,8 +978,8 @@ begin
     end if;
   end if;
 
-  insert into mysteries (title, intro, resolution)
-  values (v_title, coalesce(v_src.intro, ''), coalesce(v_src.resolution, ''))
+  insert into mysteries (title, intro, resolution, owner_id)
+  values (v_title, coalesce(v_src.intro, ''), coalesce(v_src.resolution, ''), auth.uid())
   returning * into v_new;
 
   if v_src.id is not null then
@@ -1197,3 +1204,63 @@ grant execute on function owner_delete_suspect(uuid, uuid) to anon, authenticate
 grant execute on function owner_upsert_polaroid(uuid, uuid, text, text, text, int) to anon, authenticated;
 grant execute on function owner_delete_polaroid(uuid, uuid) to anon, authenticated;
 grant execute on function owner_delete_mystery(uuid) to anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- 11) AUTENTISERING: vertskontoer (Supabase Auth, «lag på toppen»)
+--     Se supabase/migrations/00003_auth.sql. Autentisering (hvem du er) —
+--     autorisasjon (hvem som får hva) håndheves i en senere migrasjon.
+-- ----------------------------------------------------------------------------
+
+-- Profil: offentlig-trygg utvidelse av auth.users. Aldri passord/tokens her.
+create table if not exists profiles (
+  id           uuid primary key references auth.users (id) on delete cascade,
+  display_name text not null default '',
+  created_at   timestamptz not null default now()
+);
+
+alter table profiles enable row level security;
+
+drop policy if exists "profiles_select_own" on profiles;
+create policy "profiles_select_own" on profiles
+  for select to authenticated using (id = auth.uid());
+
+drop policy if exists "profiles_update_own" on profiles;
+create policy "profiles_update_own" on profiles
+  for update to authenticated
+  using (id = auth.uid())
+  with check (id = auth.uid());
+
+-- Opprett profil automatisk ved registrering.
+create or replace function handle_new_user()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  insert into public.profiles (id, display_name)
+  values (new.id, coalesce(new.raw_user_meta_data ->> 'display_name', ''))
+  on conflict (id) do nothing;
+  return new;
+end $$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function handle_new_user();
+
+-- Innlogget vert henter sin egen profil (til kontosiden).
+create or replace function get_my_profile()
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_row profiles;
+begin
+  if v_uid is null then
+    raise exception 'Ikke innlogget';
+  end if;
+  select * into v_row from profiles where id = v_uid;
+  return json_build_object('id', v_uid, 'display_name', coalesce(v_row.display_name, ''));
+end $$;
+
+grant execute on function get_my_profile() to authenticated;

@@ -25,6 +25,11 @@ export const I = {
   back: 'arrow-left',
   next: 'arrow-right',
   menu: 'list',
+  account: 'user-circle',
+  login: 'sign-in',
+  logout: 'sign-out',
+  mail: 'envelope-simple',
+  password: 'lock-key',
 
   // content types / section anchors
   role: 'identification-card',

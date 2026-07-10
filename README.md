@@ -55,11 +55,38 @@ engelsk kode. Se `CLAUDE.md` for arbeidsreglene.
 - Klienten leser og skriver aldri tabeller direkte: RLS er på uten policies,
   og alt går via `SECURITY DEFINER`-RPC-er som validerer tokens.
 
+## Vertskontoer (innlogging) — Supabase Auth
+
+Verter kan lage en konto og logge inn på `/konto.html` (registrering,
+innlogging, glemt/tilbakestill passord, e-postbekreftelse, kontoside). Auth
+er lagt **på toppen** av token-modellen: å være vert på en fest krever ikke
+konto ennå, men når en innlogget vert lager et spill eller mysterium, knyttes
+det til kontoen via `owner_id` (fase A). Håndhevet eierskap (RLS) og innlogging
+som krav for verkstedet kommer i fase B.
+
+All auth-logikk ligger sentralt i `src/lib/auth.js`. Passord, sesjoner og
+bekreftelses-/gjenopprettingstokens håndteres av Supabase — aldri av appen.
+
+### Må konfigureres i Supabase (Dashboard → Authentication)
+
+1. **Providers → Email**: slå på «Confirm email». Sett minste passordlengde til
+   minst 8 og skru på «Leaked password protection» (krever betalt plan).
+2. **URL Configuration → Redirect URLs**: legg til
+   `http://localhost:5173/konto.html`, `https://<ditt-netlify-domene>/konto.html`
+   og (valgfritt) `https://deploy-preview-*--<site>.netlify.app/konto.html`.
+   Appen sender alltid brukeren tilbake til sitt eget origin/`konto.html`.
+3. **Custom SMTP**: konfigurer en ekte e-postleverandør (f.eks. Resend, Postmark,
+   SendGrid). Ikke bruk Supabases innebygde test-e-post i produksjon.
+4. **Email Templates** (norsk): «Bekreft e-postadressen din», «Tilbakestill
+   passordet ditt», og «Bekreft endring av e-postadresse».
+
 ## Deploy
 
 Produksjon kommer **kun** fra `main`: commit → push → Netlify bygger og
 publiserer automatisk. Aldri deploy manuelt. Husk å sette `VITE_SUPABASE_URL`
 og `VITE_SUPABASE_ANON_KEY` som miljøvariabler i Netlify-innstillingene.
+`netlify.toml` setter også noen trygge sikkerhetshoder (en full CSP kommer i
+auth-fase B).
 
 ## Sikkerhet (kortversjonen)
 
