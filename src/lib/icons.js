@@ -64,7 +64,9 @@ export const I = {
   tabPlayers: 'users',
   tabSuspects: 'identification-card',
   tabPolaroids: 'camera',
+  tabEvidence: 'folder',
   tabReveal: 'gavel',
+  time: 'clock',
 
   // status / messages
   ok: 'check-circle',

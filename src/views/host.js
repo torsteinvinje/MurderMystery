@@ -14,12 +14,15 @@ import { loadHost, saveHost, clearHost } from '../lib/tokens.js'
 
 const app = document.querySelector('#app')
 
+// The host dashboard's tabs; also the valid values for the URL hash.
+const TAB_IDS = ['regi', 'spillere', 'mistenkte', 'polaroider', 'bevis', 'avsloring']
+
 const state = {
   screen: 'loading', // 'loading' | 'landing' | 'dashboard'
   error: '',
   busy: false,
   flash: '',
-  tab: 'regi', // 'regi' | 'spillere' | 'mistenkte' | 'polaroider' | 'avsloring'
+  tab: 'regi', // regi | spillere | mistenkte | polaroider | bevis | avsloring
   catalog: [], // list_mysteries() for the landing picker
   selectedMystery: null,
   game: null,
@@ -27,6 +30,8 @@ const state = {
   suspects: [],
   polaroids: [],
   suspicions: [],
+  evidence: [],
+  evidenceError: '',
   showSolution: false, // host may be projecting the screen — keep it hidden by default
   confirmReveal: false, // two-tap guard on the big red button
 }
@@ -50,6 +55,8 @@ async function init() {
     await refreshAll()
     startWatching()
     state.screen = 'dashboard'
+    const fromHash = location.hash.slice(1)
+    if (TAB_IDS.includes(fromHash)) state.tab = fromHash
   } catch {
     // Saved token doesn't match a game anymore — back to the landing page.
     clearHost()
@@ -91,7 +98,27 @@ async function refreshAll() {
     rpc('host_get_suspicions', { p_host_token: t }),
   ])
   Object.assign(state, { game, players, suspects, polaroids, suspicions })
+
+  // Evidence is loaded separately and defensively: if migration 00004 hasn't
+  // been run yet, a missing RPC must NOT break the rest of the dashboard —
+  // the Bevis tab shows a guiding error instead.
+  try {
+    state.evidence = await rpc('host_list_evidence', { p_host_token: t })
+    state.evidenceError = ''
+  } catch (err) {
+    state.evidence = []
+    state.evidenceError = err.message
+  }
   render()
+}
+
+// Norwegian date/time for evidence timestamps.
+function formatDate(iso) {
+  try {
+    return new Date(iso).toLocaleString('nb-NO', { dateStyle: 'medium', timeStyle: 'short' })
+  } catch {
+    return ''
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -261,6 +288,7 @@ function renderDashboard() {
     ['spillere', `Spillere (${state.players.length})`, I.tabPlayers],
     ['mistenkte', 'Mistenkte', I.tabSuspects],
     ['polaroider', 'Polaroider', I.tabPolaroids],
+    ['bevis', 'Bevis', I.tabEvidence],
     ['avsloring', 'Avsløring', I.tabReveal],
   ]
 
@@ -297,10 +325,12 @@ function renderDashboard() {
 
   // Nav's "Start ny fest" button ends the current party and returns to landing.
   wireTopNav(app, { onNewFest: newGame })
-  // Wire up everything that exists in the current tab.
+  // Wire up everything that exists in the current tab. The active tab is kept
+  // in the URL hash so it survives a refresh and can be linked to directly.
   app.querySelectorAll('[data-tab]').forEach((btn) =>
     btn.addEventListener('click', () => {
       state.tab = btn.dataset.tab
+      history.replaceState(null, '', `#${btn.dataset.tab}`)
       render()
     })
   )
@@ -313,9 +343,52 @@ function renderTab() {
     case 'spillere': return renderSpillere()
     case 'mistenkte': return renderMistenkte()
     case 'polaroider': return renderPolaroider()
+    case 'bevis': return renderBevis()
     case 'avsloring': return renderAvsloring()
     default: return ''
   }
+}
+
+// --- Bevis: the host's private, party-scoped evidence locker -----------------
+
+function renderBevis() {
+  const list = state.evidence || []
+  let body
+  if (state.evidenceError) {
+    body = `<p class="error">${icon(I.warn, { lead: true })}Kunne ikke laste bevis. Er databaseoppdateringen «00004_evidence.sql» kjørt i Supabase?</p>`
+  } else if (list.length === 0) {
+    body = `<p class="notice">Ingen bevis lagt til ennå. Bruk skjemaet under for å legge
+      til det første — bevisene vises bare her hos deg, aldri til gjestene.</p>`
+  } else {
+    body = list
+      .map(
+        (e) => `
+      <div class="card">
+        ${e.image_url ? `<img src="${esc(e.image_url)}" alt="${esc(e.title)}" style="max-width:100%;border-radius:var(--radius-sm);display:block;margin-bottom:10px;" />` : ''}
+        <div class="title-row" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+          <h3 style="margin:0;">${esc(e.title)}</h3>
+          <button class="btn-quiet" data-delete-evidence="${esc(e.id)}">${icon(I.del, { lead: true })}Slett</button>
+        </div>
+        ${e.description ? `<p>${escMultiline(e.description)}</p>` : ''}
+        <p class="hint">${icon(I.time, { lead: true })}Lagt til ${esc(formatDate(e.created_at))}</p>
+      </div>`
+      )
+      .join('')
+  }
+
+  return `
+    <h2>${icon(I.tabEvidence, { lead: true })}Bevis</h2>
+    <p class="lede">Din private saksmappe for denne festen — bilder, notater og spor.
+    Kun du ser dem; de vises aldri til gjestene.</p>
+    ${body}
+    <hr class="divider" />
+    <h3>${icon(I.add, { lead: true })}Nytt bevis</h3>
+    <form data-hold id="new-evidence-form">
+      <label>Tittel <input name="title" maxlength="160" required placeholder="F.eks. «Blodig serviett»" /></label>
+      <label>Beskrivelse (valgfritt) <textarea name="description" placeholder="Hva er dette, og hvorfor er det interessant?"></textarea></label>
+      <label>Bilde-URL (valgfritt) <input name="image_url" placeholder="https://…" /></label>
+      <button>${icon(I.add, { lead: true })}Legg til bevis</button>
+    </form>`
 }
 
 // --- Regi: the phase director ----------------------------------------------
@@ -631,6 +704,27 @@ function wireTabEvents() {
       }, 'Bevis lagt til')
     })
   }
+
+  // Bevis: add / delete evidence.
+  const newEvidenceForm = app.querySelector('#new-evidence-form')
+  if (newEvidenceForm) {
+    newEvidenceForm.addEventListener('submit', (e) => {
+      e.preventDefault()
+      const f = e.target.elements
+      hostAction('host_add_evidence', {
+        p_title: f.title.value,
+        p_description: f.description.value,
+        p_image_url: f.image_url.value || null,
+      }, 'Bevis lagt til')
+    })
+  }
+  app.querySelectorAll('[data-delete-evidence]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      if (confirm('Slette dette beviset for godt?')) {
+        hostAction('host_delete_evidence', { p_evidence_id: btn.dataset.deleteEvidence }, 'Slettet')
+      }
+    })
+  )
 
   // Avsløring: the two-tap red button.
   const revealBtn = app.querySelector('#reveal-btn')
