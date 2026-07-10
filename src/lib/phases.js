@@ -5,8 +5,8 @@ export const PHASES = [
   {
     id: 'velkommen',
     label: 'Velkommen',
-    player: 'Finn deg noe å drikke og hold deg i nærheten — lensmannen tar snart ordet.',
-    script: 'Ønsk gjestene velkommen mens alle blir med i appen. Når alle er inne: les introduksjonen høyt — liket av Odd Gunnar Vollan er nettopp funnet bak redskapsskjulet.',
+    player: 'Finn deg noe å drikke og hold deg i nærheten — verten tar snart ordet.',
+    script: 'Ønsk gjestene velkommen mens alle blir med i appen. Når alle er inne: les åstedsrapporten (introduksjonen) høyt — et lik er nettopp funnet.',
   },
   {
     id: 'roller',
@@ -23,7 +23,7 @@ export const PHASES = [
   {
     id: 'ledetraader',
     label: 'Ledetrådene',
-    player: 'Lensmannen legger fram bevis fra åstedet. Følg med på polaroidene som dukker opp nedenfor.',
+    player: 'Verten legger fram bevis fra åstedet. Følg med på polaroidene som dukker opp nedenfor.',
     script: 'Samle alle. Avslør polaroidene ett og ett under «Polaroider», og les hvert av dem høyt med passe dramatikk. Slipp gjerne løs litt diskusjon mellom hvert bevis.',
   },
   {

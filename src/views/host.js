@@ -1,7 +1,7 @@
-// Host view ("lensmannskontoret"): create a game, run the phases, hand out
-// roles, reveal polaroids, edit content, and finally reveal the murderer.
-// The host is the only browser allowed to see is_killer and the resolution —
-// authenticated by the secret host_token the database handed us at creation.
+// Host view ("vertskontrollen"): pick a mystery, create a game, run the
+// phases, hand out roles, reveal polaroids, edit content, and finally reveal
+// the murderer. The host is the only browser allowed to see is_killer and the
+// resolution — authenticated by the secret host_token from create_game.
 
 import '../styles/main.css'
 import { rpc } from '../lib/supabase.js'
@@ -16,7 +16,10 @@ const state = {
   screen: 'loading', // 'loading' | 'landing' | 'dashboard'
   error: '',
   busy: false,
+  flash: '',
   tab: 'regi', // 'regi' | 'spillere' | 'mistenkte' | 'polaroider' | 'avsloring'
+  catalog: [], // list_mysteries() for the landing picker
+  selectedMystery: null,
   game: null,
   players: [],
   suspects: [],
@@ -28,6 +31,7 @@ const state = {
 
 let stopWatching = null
 let pendingRender = false
+let flashTimer = null
 
 const token = () => loadHost()?.host_token ?? null
 
@@ -35,6 +39,7 @@ init()
 
 async function init() {
   if (!token()) {
+    await loadCatalog()
     state.screen = 'landing'
     render()
     return
@@ -46,9 +51,25 @@ async function init() {
   } catch {
     // Saved token doesn't match a game anymore — back to the landing page.
     clearHost()
+    await loadCatalog()
     state.screen = 'landing'
   }
   render()
+}
+
+// The landing page lists every mystery in the catalog. A ?mystery=<id> in the
+// URL (used by the studio's "start a party" button) preselects one.
+async function loadCatalog() {
+  try {
+    state.catalog = await rpc('list_mysteries')
+  } catch (err) {
+    state.catalog = []
+    state.error = err.message
+  }
+  const wanted = new URLSearchParams(location.search).get('mystery')
+  const preselected = state.catalog.find((m) => m.id === wanted && m.ready)
+  const firstReady = state.catalog.find((m) => m.ready)
+  state.selectedMystery = (preselected ?? firstReady)?.id ?? null
 }
 
 function startWatching() {
@@ -75,12 +96,12 @@ async function refreshAll() {
 // Actions
 // --------------------------------------------------------------------------
 
-async function createGame() {
+async function createGame(mysteryId) {
   state.busy = true
   state.error = ''
   render()
   try {
-    const created = await rpc('create_game')
+    const created = await rpc('create_game', { p_mystery_id: mysteryId ?? null })
     saveHost({ host_token: created.host_token, game_id: created.game_id, code: created.code })
     await refreshAll()
     startWatching()
@@ -93,16 +114,28 @@ async function createGame() {
   render()
 }
 
-// Small wrapper: run a host RPC, surface errors, let realtime refresh the rest.
-async function hostAction(name, params = {}) {
+// Small wrapper: run a host RPC, surface errors, let realtime refresh the
+// rest. Pass flashText to confirm a successful save to the host.
+async function hostAction(name, params = {}, flashText = '') {
   state.error = ''
   try {
     await rpc(name, { p_host_token: token(), ...params })
     await refreshAll()
+    if (flashText) showFlash(flashText)
   } catch (err) {
     state.error = err.message
     render()
   }
+}
+
+function showFlash(text) {
+  state.flash = text
+  render()
+  clearTimeout(flashTimer)
+  flashTimer = setTimeout(() => {
+    state.flash = ''
+    render()
+  }, 1600)
 }
 
 async function doReveal() {
@@ -112,12 +145,15 @@ async function doReveal() {
   state.confirmReveal = false
 }
 
-function newGame() {
+async function newGame() {
   if (!confirm('Starte en helt ny fest? Den gamle festkoden slutter å virke på denne enheten (spillet slettes ikke).')) return
   if (stopWatching) stopWatching()
   clearHost()
-  state.screen = 'landing'
   state.game = null
+  state.screen = 'loading'
+  render()
+  await loadCatalog()
+  state.screen = 'landing'
   render()
 }
 
@@ -136,11 +172,14 @@ function render() {
   pendingRender = false
 
   if (state.screen === 'loading') {
-    app.innerHTML = `<div class="sheet"><p class="notice">Låser opp lensmannskontoret …</p></div>`
+    app.innerHTML = `<div class="sheet"><p class="notice">Åpner vertskontrollen …</p></div>`
   } else if (state.screen === 'landing') {
     renderLanding()
   } else {
     renderDashboard()
+  }
+  if (state.flash) {
+    app.insertAdjacentHTML('beforeend', `<div class="flash">${esc(state.flash)}</div>`)
   }
 }
 
@@ -155,34 +194,60 @@ app.addEventListener('focusout', () => {
 })
 
 function renderLanding() {
+  const cards = state.catalog
+    .map((m) => {
+      const selected = m.id === state.selectedMystery
+      return `
+        <div class="mystery-card${selected ? ' selected' : ''}" data-mystery="${esc(m.id)}"
+             style="cursor:${m.ready ? 'pointer' : 'default'};">
+          <div class="title-row">
+            <strong>${esc(m.title)}</strong>
+            <span class="badge${m.ready ? ' ok' : ''}">${m.ready ? 'Klart til å spilles' : 'Uferdig'}</span>
+          </div>
+          <p class="meta">${m.suspect_count} mistenkte · ${m.polaroid_count} bevis${m.is_builtin ? ' · innebygd' : ''}</p>
+          ${selected ? `<p>${esc(String(m.intro).slice(0, 180))}${String(m.intro).length > 180 ? '…' : ''}</p>` : ''}
+        </div>`
+    })
+    .join('')
+
+  const selected = state.catalog.find((m) => m.id === state.selectedMystery)
+
   app.innerHTML = `
     <div class="sheet">
       <header class="case-header">
-        <div class="case-no"><span>Lensmannskontoret</span><span>Vollan gård</span></div>
-        <h1>Ljåmordet på grillfesten</h1>
-        <p class="lede">Du er lensmannen. Du styrer kvelden, deler ut roller, legger
-        fram bevis — og du er den eneste som vet hvem morderen er.</p>
-        <span class="stamp">Kun for lensmannen</span>
+        <div class="case-no"><span class="brand">MurderMystery</span><span>Vertskontroll</span></div>
+        <h1>Start en fest</h1>
+        <p class="lede">Du er verten: du styrer kvelden, deler ut roller, legger fram
+        bevis — og du er den eneste som vet hvem morderen er. Velg et mysterium og
+        trykk på knappen, så får du en firetegns festkode gjestene bruker for å bli med.</p>
       </header>
 
       ${state.error ? `<p class="error">${esc(state.error)}</p>` : ''}
 
-      <div class="card">
-        <h3>Slik fungerer det</h3>
-        <p>Trykk på knappen, så får du en firetegns festkode. Gjestene går til
-        forsiden på telefonen sin og taster inn koden. Deretter styrer du kvelden
-        fase for fase fra denne skjermen.</p>
-        <button id="create-btn" ${state.busy ? 'disabled' : ''}>
-          ${state.busy ? 'Åpner ny sak …' : 'Start ny grillfest'}
-        </button>
-      </div>
+      <h2>Velg mysterium</h2>
+      ${cards || `<p class="notice">Fant ingen mysterier. Er databaseskjemaet kjørt i Supabase?</p>`}
+
+      <button id="create-btn" ${state.busy || !selected ? 'disabled' : ''}>
+        ${state.busy ? 'Oppretter fest …' : selected ? `Start fest med «${esc(selected.title)}»` : 'Velg et mysterium først'}
+      </button>
+
+      <p class="lede" style="margin-top:18px;">Vil du lage ditt eget mysterium, med
+      egne mistenkte og egen morder? <a href="/studio.html">Åpne verkstedet →</a></p>
 
       <footer class="app-footer">
         <span>Skal du være gjest i stedet? <a href="/">Til festen →</a></span>
       </footer>
     </div>`
 
-  app.querySelector('#create-btn').addEventListener('click', createGame)
+  app.querySelectorAll('[data-mystery]').forEach((card) =>
+    card.addEventListener('click', () => {
+      const mystery = state.catalog.find((m) => m.id === card.dataset.mystery)
+      if (!mystery?.ready) return
+      state.selectedMystery = mystery.id
+      render()
+    })
+  )
+  app.querySelector('#create-btn').addEventListener('click', () => createGame(state.selectedMystery))
 }
 
 function renderDashboard() {
@@ -199,8 +264,8 @@ function renderDashboard() {
     <div class="sheet">
       <header class="case-header">
         <div class="case-no">
-          <span>Lensmannskontoret</span>
-          <span>${game.status === 'revealed' ? 'SAK OPPKLART' : 'Etterforskning pågår'}</span>
+          <span class="brand">MurderMystery</span>
+          <span>${game.status === 'revealed' ? 'Sak oppklart' : 'Vertskontroll'}</span>
         </div>
         <h1>${esc(game.title)}</h1>
         <p class="lede">Gjestene blir med på forsiden av appen med denne koden:</p>
@@ -222,7 +287,10 @@ function renderDashboard() {
 
       <footer class="app-footer">
         <span>Festkode ${esc(game.code)}</span>
-        <a href="#" id="new-game-link">Start ny fest</a>
+        <span>
+          <a href="/studio.html">Verkstedet</a> ·
+          <a href="#" id="new-game-link">Start ny fest</a>
+        </span>
       </footer>
     </div>`
 
@@ -518,7 +586,7 @@ function wireTabEvents() {
         p_public_info: f.public_info.value,
         p_secret: f.secret.value,
         p_alibi: f.alibi.value,
-      })
+      }, 'Lagret ✓')
     })
   )
 
@@ -547,7 +615,7 @@ function wireTabEvents() {
         p_title: f.title.value,
         p_caption: f.caption.value,
         p_image_url: f.image_url.value || null,
-      })
+      }, 'Lagret ✓')
     })
   )
   const newPolaroidForm = app.querySelector('#new-polaroid-form')
@@ -559,7 +627,7 @@ function wireTabEvents() {
         p_title: f.title.value,
         p_caption: f.caption.value,
         p_image_url: f.image_url.value || null,
-      })
+      }, 'Bevis lagt til')
     })
   }
 

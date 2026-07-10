@@ -1,199 +1,238 @@
 /* ==========================================================================
-   Ljåmordet på grillfesten — saksmappe-estetikk
-   Georgia-serif, mørkt blekk på gulnet papir, rød stempelrød, markeringstusj
-   på alibiene. Mobil først: gjestene står med telefonen i hånda på tunet.
+   MurderMystery — modern, clean UI
+   System font stack, white cards on a light gray canvas, deep red accent.
+   Mobile-first: guests hold a phone at a party; the host may project.
    ========================================================================== */
 
 :root {
-  --paper: #f3ead7;
-  --paper-dark: #e9dcbc;
-  --paper-edge: #d8c79f;
-  --ink: #2a241b;
-  --ink-soft: #5c5243;
-  --ink-faint: #8a7d68;
-  --red: #a02c2c;
-  --red-dark: #7c1f1f;
-  --highlight: #f5e074;
-  --ok: #3e6b3a;
-  --mono: 'Courier New', Courier, monospace;
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-soft: #f8f9fb;
+  --border: #e5e8ee;
+  --text: #171a20;
+  --text-muted: #626b7a;
+  --text-faint: #98a1b0;
+  --accent: #c22432;        /* crime red */
+  --accent-strong: #9e1b27;
+  --accent-soft: #fbeaec;
+  --ok: #177245;
+  --ok-soft: #e7f5ed;
+  --warn-soft: #fdf3df;
+  --radius: 14px;
+  --radius-sm: 9px;
+  --shadow: 0 1px 2px rgba(23, 26, 32, 0.05), 0 6px 24px rgba(23, 26, 32, 0.06);
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  background: #211b13;
-  background-image: radial-gradient(ellipse at 50% 0%, #322a1e 0%, #211b13 70%);
-  color: var(--ink);
-  font-family: Georgia, 'Times New Roman', serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Selve papirarket alt ligger på */
+/* Page container */
 .sheet {
-  max-width: 700px;
+  max-width: 720px;
   margin: 0 auto;
   min-height: 100vh;
   min-height: 100dvh;
-  background: var(--paper);
-  background-image: linear-gradient(180deg, rgba(0,0,0,0.03) 0, transparent 120px);
-  box-shadow: 0 0 60px rgba(0, 0, 0, 0.6);
-  padding: 22px 18px 70px;
+  padding: 20px 16px 72px;
 }
 
-@media (min-width: 740px) {
-  .sheet { padding: 34px 42px 80px; }
+@media (min-width: 760px) {
+  .sheet { padding: 36px 24px 88px; }
 }
 
-/* --- Toppen av saksmappa ----------------------------------------------- */
+/* --- Header ---------------------------------------------------------------- */
 
-.case-header { border-bottom: 3px double var(--ink); padding-bottom: 14px; margin-bottom: 18px; }
+.case-header { margin-bottom: 20px; }
 
+/* Brand row: app name + context on the right */
 .case-header .case-no {
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--ink-soft);
   display: flex;
   justify-content: space-between;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
 }
+
+.case-header .case-no .brand { color: var(--accent); }
 
 h1 {
   font-size: clamp(26px, 6vw, 38px);
-  line-height: 1.1;
-  margin: 8px 0 4px;
-  letter-spacing: 0.5px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+  margin: 10px 0 6px;
 }
 
 h2 {
-  font-size: 20px;
-  margin: 28px 0 10px;
-  border-bottom: 1px solid var(--paper-edge);
-  padding-bottom: 4px;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 30px 0 10px;
 }
 
-h3 { font-size: 17px; margin: 16px 0 6px; }
+h3 { font-size: 16.5px; font-weight: 700; margin: 14px 0 6px; }
 
-.lede { color: var(--ink-soft); font-style: italic; margin: 4px 0 16px; }
+.lede { color: var(--text-muted); margin: 4px 0 14px; }
 
-/* Rødt "stempel" */
+/* Small red pill (formerly the rubber stamp) */
 .stamp {
   display: inline-block;
-  font-family: var(--mono);
   font-size: 12px;
-  font-weight: bold;
-  letter-spacing: 2px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--red);
-  border: 2px solid var(--red);
-  border-radius: 3px;
-  padding: 3px 9px;
-  transform: rotate(-2deg);
-  opacity: 0.85;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 4px 12px;
 }
 
 .badge {
   display: inline-block;
-  font-family: var(--mono);
   font-size: 12px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  background: var(--ink);
-  color: var(--paper);
-  border-radius: 3px;
-  padding: 3px 9px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  vertical-align: middle;
 }
 
-.badge.red { background: var(--red); }
+.badge.red {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
 
-/* Festkoden, stor og tydelig */
+.badge.ok {
+  color: var(--ok);
+  background: var(--ok-soft);
+  border-color: transparent;
+}
+
+/* Party code, big and glanceable */
 .code-display {
-  font-family: var(--mono);
-  font-size: clamp(38px, 12vw, 64px);
-  font-weight: bold;
-  letter-spacing: 12px;
+  font-size: clamp(40px, 12vw, 64px);
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  text-indent: 0.28em; /* optical centering against the letter-spacing */
   text-align: center;
-  padding: 14px 0 10px 12px; /* venstre-kompensasjon for letter-spacing */
-  border: 3px dashed var(--ink-soft);
-  border-radius: 6px;
-  background: var(--paper-dark);
-  margin: 14px 0;
+  padding: 18px 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin: 16px 0;
 }
 
-/* --- Kort og bokser ------------------------------------------------------ */
+/* --- Cards & boxes ---------------------------------------------------------- */
 
 .card {
-  background: #fbf6e9;
-  border: 1px solid var(--paper-edge);
-  border-radius: 4px;
-  box-shadow: 2px 3px 0 rgba(42, 36, 27, 0.12);
-  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px;
   margin: 14px 0;
 }
 
-.card .kicker {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 2px;
+.card .kicker,
+.phase-hint .kicker {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-faint);
-  margin: 0 0 2px;
+  color: var(--text-faint);
+  margin: 0 0 4px;
 }
 
 .card h3 { margin-top: 2px; }
 
-/* Alibi: tekst med markeringstusj */
+/* Alibi: quiet quote block */
 .alibi {
   margin: 10px 0;
-  padding: 10px 12px;
-  background: linear-gradient(104deg, transparent 0.5%, var(--highlight) 1.5%, var(--highlight) 98%, transparent 99.5%);
+  padding: 12px 14px;
+  background: var(--warn-soft);
+  border-radius: var(--radius-sm);
   font-style: italic;
 }
 
-/* Hemmelighet: skjult bak et trykk */
-.secret-box { margin: 10px 0; }
+/* Secret: revealed on tap, visually "hot" */
+.secret-box { margin: 12px 0; }
 
 .secret-box .secret-content {
-  border-left: 4px solid var(--red);
-  padding: 8px 12px;
-  background: rgba(160, 44, 44, 0.06);
+  margin-top: 10px;
+  padding: 12px 14px;
+  background: var(--accent-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
-.notice { color: var(--ink-soft); font-style: italic; text-align: center; padding: 24px 8px; }
+.notice { color: var(--text-muted); text-align: center; padding: 28px 8px; }
 
 .error {
-  background: rgba(160, 44, 44, 0.1);
-  border: 1px solid var(--red);
-  border-radius: 4px;
-  color: var(--red-dark);
-  padding: 10px 12px;
-  margin: 10px 0;
+  background: var(--accent-soft);
+  border: 1px solid #f2c1c6;
+  border-radius: var(--radius-sm);
+  color: var(--accent-strong);
+  padding: 11px 14px;
+  margin: 12px 0;
+  font-size: 15px;
+}
+
+.flash {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 9px 18px;
+  box-shadow: var(--shadow);
+  z-index: 50;
+  pointer-events: none;
 }
 
 .phase-hint {
-  border: 1px solid var(--ink-soft);
-  border-radius: 4px;
-  background: var(--paper-dark);
-  padding: 10px 14px;
-  margin: 14px 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 12px 16px;
+  margin: 16px 0;
 }
 
-.phase-hint .kicker {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--ink-soft);
-  margin: 0;
+.phase-hint p { margin: 2px 0; }
+
+/* --- Forms & buttons --------------------------------------------------------- */
+
+label {
+  display: block;
+  margin: 14px 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
 }
-
-/* --- Skjemaer og knapper ------------------------------------------------- */
-
-label { display: block; margin: 14px 0 4px; font-weight: bold; }
 
 input[type='text'],
 input:not([type]),
@@ -201,185 +240,250 @@ textarea,
 select {
   width: 100%;
   font-family: inherit;
-  font-size: 16px; /* hindrer zoom på iOS */
-  color: var(--ink);
-  background: #fbf6e9;
-  border: 1px solid var(--ink-soft);
-  border-radius: 4px;
-  padding: 10px 12px;
+  font-size: 16px; /* prevents iOS zoom-on-focus */
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 13px;
+  transition: border-color 0.12s, box-shadow 0.12s;
 }
 
-textarea { min-height: 80px; resize: vertical; }
+textarea { min-height: 86px; resize: vertical; }
 
 input:focus, textarea:focus, select:focus {
-  outline: 2px solid var(--red);
-  outline-offset: 1px;
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(194, 36, 50, 0.14);
 }
 
 button {
-  font-family: Georgia, serif;
-  font-size: 16px;
-  color: var(--paper);
-  background: var(--ink);
+  font-family: inherit;
+  font-size: 15.5px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--text);
   border: none;
-  border-radius: 4px;
-  padding: 11px 18px;
+  border-radius: 999px;
+  padding: 11px 20px;
   cursor: pointer;
   margin-top: 12px;
+  transition: filter 0.12s, transform 0.05s;
 }
 
-button:hover { background: #423a2c; }
+button:hover { filter: brightness(1.15); }
+button:active { transform: scale(0.98); }
 button:disabled { opacity: 0.55; cursor: wait; }
 
-.btn-danger { background: var(--red); }
-.btn-danger:hover { background: var(--red-dark); }
+.btn-danger { background: var(--accent); }
+.btn-danger:hover { filter: brightness(1.08); }
 
 .btn-quiet {
-  background: transparent;
-  color: var(--ink-soft);
-  border: 1px solid var(--ink-soft);
-  padding: 7px 12px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 8px 14px;
   font-size: 14px;
 }
-.btn-quiet:hover { background: var(--paper-dark); color: var(--ink); }
+.btn-quiet:hover { background: var(--surface-soft); filter: none; }
 
 .btn-reveal {
   display: block;
   width: 100%;
-  font-size: 20px;
-  letter-spacing: 1px;
-  padding: 18px;
-  background: var(--red);
+  font-size: 19px;
+  padding: 17px;
+  border-radius: var(--radius);
+  background: var(--accent);
 }
-.btn-reveal:hover { background: var(--red-dark); }
+.btn-reveal:hover { background: var(--accent-strong); filter: none; }
 
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.btn-row button { margin-top: 8px; }
 
-/* --- Mistenkt-liste med luper -------------------------------------------- */
+/* --- Suspect list with magnifiers --------------------------------------------- */
 
 .suspect-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
-  padding: 10px 4px;
-  border-bottom: 1px dotted var(--paper-edge);
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin: 8px 0;
 }
 
 .suspect-row .who { min-width: 0; }
-.suspect-row .who .tagline { color: var(--ink-soft); font-size: 14px; font-style: italic; }
+.suspect-row .who .tagline { color: var(--text-muted); font-size: 14px; }
 
 .lupe-btn {
   flex-shrink: 0;
-  min-width: 96px;
+  min-width: 92px;
   margin: 0;
   font-size: 15px;
-  background: var(--paper-dark);
-  color: var(--ink);
-  border: 1px solid var(--ink-soft);
+  background: var(--surface-soft);
+  color: var(--text);
+  border: 1px solid var(--border);
 }
-.lupe-btn:hover { background: var(--paper-edge); }
-.lupe-btn.max { background: var(--red); color: var(--paper); border-color: var(--red-dark); }
+.lupe-btn:hover { filter: none; background: var(--border); }
+.lupe-btn.max { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-/* --- Polaroider ----------------------------------------------------------- */
+/* --- Polaroids (evidence cards) ------------------------------------------------ */
 
 .polaroid {
-  background: #fff;
-  border: 1px solid #ddd;
-  box-shadow: 3px 4px 10px rgba(0, 0, 0, 0.25);
-  padding: 12px 12px 16px;
-  margin: 18px 6px;
-  transform: rotate(-1.2deg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  margin: 16px 0;
 }
-.polaroid:nth-child(even) { transform: rotate(1.4deg); }
 
-.polaroid img { max-width: 100%; display: block; }
+.polaroid img { width: 100%; display: block; }
 
 .polaroid .photo-area {
-  background: #1d1a14;
-  color: #cfc4a8;
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 1px;
+  background: linear-gradient(135deg, #22262e, #3a4150);
+  color: #aab3c2;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   text-align: center;
-  padding: 34px 10px;
-  margin-bottom: 10px;
+  padding: 38px 10px;
 }
 
-.polaroid .caption { font-size: 15px; }
-.polaroid .p-title { font-weight: bold; margin: 0 0 4px; }
+.polaroid .caption { padding: 14px 16px 16px; font-size: 15px; }
+.polaroid .p-title { font-weight: 700; font-size: 16px; margin: 0 0 4px; }
+.polaroid .caption p { margin: 6px 0; }
 
-.polaroid.hidden-from-players { opacity: 0.65; border: 1px dashed var(--ink-soft); }
+.polaroid.hidden-from-players { opacity: 0.72; border-style: dashed; box-shadow: none; }
 
-/* --- Vertens faner --------------------------------------------------------- */
+/* --- Host tabs -------------------------------------------------------------------- */
 
 .tabnav {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   flex-wrap: wrap;
-  border-bottom: 2px solid var(--ink);
-  margin: 18px 0 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px;
+  margin: 18px 0 8px;
+  box-shadow: var(--shadow);
 }
 
 .tabnav button {
+  flex: 1 1 auto;
   margin: 0;
-  border-radius: 4px 4px 0 0;
-  background: var(--paper-dark);
-  color: var(--ink);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
   font-size: 14px;
   padding: 8px 12px;
 }
-.tabnav button.active { background: var(--ink); color: var(--paper); }
+.tabnav button:hover { filter: none; background: var(--surface-soft); }
+.tabnav button.active { background: var(--text); color: #fff; }
 
 .phase-step {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: flex-start;
-  padding: 10px 6px;
-  border-bottom: 1px dotted var(--paper-edge);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin: 8px 0;
 }
-.phase-step .num {
-  font-family: var(--mono);
-  font-weight: bold;
-  color: var(--ink-faint);
-  padding-top: 2px;
-}
-.phase-step.current .num { color: var(--red); }
-.phase-step .script { font-size: 14px; color: var(--ink-soft); margin: 2px 0 0; }
+.phase-step.current { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(194, 36, 50, 0.1); }
+.phase-step .num { font-weight: 800; color: var(--text-faint); padding-top: 1px; }
+.phase-step.current .num { color: var(--accent); }
+.phase-step .script { font-size: 14px; color: var(--text-muted); margin: 3px 0 0; }
 .phase-step button { margin: 0; flex-shrink: 0; }
 
-table.tally { width: 100%; border-collapse: collapse; margin: 10px 0; }
+table.tally {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin: 10px 0;
+}
 table.tally th, table.tally td {
   text-align: left;
-  padding: 7px 8px;
-  border-bottom: 1px dotted var(--paper-edge);
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
 }
+table.tally tr:last-child td { border-bottom: none; }
 table.tally th {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 1px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-soft);
+  color: var(--text-faint);
+  background: var(--surface-soft);
 }
 
-/* Avsløringen */
+/* The reveal */
 .reveal-card {
-  border: 3px double var(--red);
-  background: #fbf3ea;
-  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 5px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 26px 20px;
   margin: 18px 0;
   text-align: center;
 }
-.reveal-card .killer-name { font-size: clamp(26px, 7vw, 40px); color: var(--red-dark); margin: 8px 0 2px; }
-.reveal-card .resolution { text-align: left; margin-top: 16px; }
+.reveal-card .kicker {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 10px 0 0;
+}
+.reveal-card .killer-name {
+  font-size: clamp(28px, 7vw, 42px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+  margin: 6px 0 2px;
+}
+.reveal-card .resolution { text-align: left; margin-top: 18px; }
+
+/* --- Mystery catalog / studio ------------------------------------------------------ */
+
+.mystery-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+  margin: 10px 0;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.mystery-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(194, 36, 50, 0.12);
+}
+.mystery-card .meta { color: var(--text-muted); font-size: 14px; margin: 4px 0 8px; }
+.mystery-card .title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.mystery-card .title-row strong { font-size: 17px; }
 
 footer.app-footer {
   margin-top: 44px;
-  padding-top: 12px;
-  border-top: 1px solid var(--paper-edge);
-  font-size: 13px;
-  color: var(--ink-faint);
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 13.5px;
+  color: var(--text-faint);
   display: flex;
   justify-content: space-between;
   gap: 10px;
@@ -387,17 +491,18 @@ footer.app-footer {
   align-items: center;
 }
 
-footer.app-footer a { color: var(--ink-soft); }
+footer.app-footer a { color: var(--text-muted); }
 
-details.editor { margin-top: 8px; }
+a { color: var(--accent-strong); }
+
+details.editor { margin-top: 10px; }
 details.editor summary {
   cursor: pointer;
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--ink-soft);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-muted);
 }
-details.editor label { font-size: 14px; margin-top: 10px; }
+details.editor summary:hover { color: var(--text); }
+details.editor label { margin-top: 10px; }
 
-hr.divider { border: none; border-top: 3px double var(--ink); margin: 26px 0; }
+hr.divider { border: none; border-top: 1px solid var(--border); margin: 28px 0; }

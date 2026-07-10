@@ -20,3 +20,16 @@ export const clearHost = () => localStorage.removeItem(HOST_KEY)
 export const savePlayer = (data) => localStorage.setItem(PLAYER_KEY, JSON.stringify(data))
 export const loadPlayer = () => load(PLAYER_KEY)
 export const clearPlayer = () => localStorage.removeItem(PLAYER_KEY)
+
+// The studio keeps a LIST of owned mysteries (author keys), since one person
+// can write several. Each entry: { mystery_id, owner_token }.
+const STUDIO_KEY = 'mm_studio'
+
+export function loadStudioList() {
+  const list = load(STUDIO_KEY)
+  return Array.isArray(list) ? list : []
+}
+
+export function saveStudioList(list) {
+  localStorage.setItem(STUDIO_KEY, JSON.stringify(list))
+}

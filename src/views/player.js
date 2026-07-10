@@ -154,9 +154,10 @@ function renderJoin() {
   app.innerHTML = `
     <div class="sheet">
       <header class="case-header">
-        <div class="case-no"><span>Sak nr. 1974-07</span><span>Vollan gård</span></div>
-        <h1>Ljåmordet på grillfesten</h1>
-        <p class="lede">Et mordmysterium til grillfest. Verten er lensmann — alle andre er mistenkte.</p>
+        <div class="case-no"><span class="brand">MurderMystery</span><span>Bli med</span></div>
+        <h1>Bli med på mysteriet</h1>
+        <p class="lede">Verten gir deg en firetegns festkode. Tast den inn, så får du
+        rollekort, hemmelighet og alibi på din egen telefon.</p>
         <span class="stamp">Strengt fortrolig</span>
       </header>
 
@@ -172,7 +173,7 @@ function renderJoin() {
       </form>
 
       <footer class="app-footer">
-        <span>Er du verten? <a href="/host.html">Gå til lensmannskontoret →</a></span>
+        <span>Er du verten? <a href="/host.html">Til vertskontrollen →</a></span>
       </footer>
     </div>`
 
@@ -189,7 +190,7 @@ function renderGame() {
   parts.push(`
     <header class="case-header">
       <div class="case-no">
-        <span>Sak nr. 1974-07 · kode ${esc(game.code)}</span>
+        <span class="brand">MurderMystery · ${esc(game.code)}</span>
         <span>${esc(player.display_name)}</span>
       </div>
       <h1>${esc(game.title)}</h1>
@@ -237,7 +238,7 @@ function renderGame() {
 
   parts.push(`
     <footer class="app-footer">
-      <span>Ljåmordet på grillfesten</span>
+      <span>MurderMystery</span>
       <a href="#" id="leave-link">Forlat festen</a>
     </footer>`)
 
@@ -265,7 +266,7 @@ function renderRoleCard(suspect) {
       <div class="card">
         <p class="kicker">Din rolle</p>
         <h3>Etterforsker</h3>
-        <p>Du har ingen hemmeligheter — du er lensmannens høyre hånd. Forhør de
+        <p>Du har ingen hemmeligheter — du er vertens høyre hånd. Forhør de
         mistenkte, sammenlign alibier og hjelp festen med å avsløre morderen.</p>
       </div>`
   }

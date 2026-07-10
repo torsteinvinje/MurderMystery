@@ -1,15 +1,15 @@
-# CLAUDE.md — Ljåmordet på grillfesten
+# CLAUDE.md — MurderMystery
 
 Standing instructions for this project. Read at the start of every session. The one-off build plan lives in the separate build prompt; this file is only the rules that must always hold.
 
 ## What this is
 
-A web app for hosting a Norwegian murder-mystery party game, "Ljåmordet på grillfesten." A host runs a live in-person party; the app is the digital game master. Two experiences: a **host** view (full control, sees the solution) and a **player** view (each guest joins with a code, gets a role card, marks suspicion). Game content is in **Norwegian** and stays Norwegian — only code, comments, and scaffolding are in English.
+**MurderMystery** — a web app for hosting Norwegian murder-mystery party games. A host runs a live in-person party; the app is the digital game master. Three experiences: a **host** view (full control, sees the solution), a **player** view (each guest joins with a code, gets a role card, marks suspicion), and a **studio** view (author your own mysteries: suspects, murderer, evidence). Mysteries are templates in a catalog; each game copies its mystery's content at creation. The built-in mystery is "Ljåmordet på grillfesten". Game content is in **Norwegian** and stays Norwegian — only code, comments, and scaffolding are in English.
 
 ## Tech stack (do not swap without asking)
 
 - Vite + vanilla JavaScript (ES modules). No TypeScript unless trivial.
-- Plain CSS. Aesthetic: sheriff's case file — Georgia serif, dark ink on paper, alibi text in highlighted boxes.
+- Plain CSS. Aesthetic: modern and clean — system font stack, white cards on a light gray canvas, deep red accent, mobile-first.
 - Supabase (Postgres + RLS + Realtime) for data, and Netlify for hosting.
 
 ## Repo & deploy workflow (strict)
@@ -22,7 +22,7 @@ A web app for hosting a Norwegian murder-mystery party game, "Ljåmordet på gri
 
 ## Security rules (non-negotiable)
 
-- The murderer's identity must never reach a player's browser before the host reveals. The `is_killer` and `resolution` columns are protected at the database level (column grants + `get_reveal` RPC that checks game status). Do not add any client code path that reads those columns directly.
+- The murderer's identity must never reach a player's browser before the host reveals. The `is_killer` and `resolution` columns (in both the game tables and the mystery-template tables) are protected at the database level (column grants + `get_reveal` RPC that checks game status). Do not add any client code path that reads those columns directly, and never expose them through catalog/list RPCs.
 - Only the public `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` may appear in client code. The Supabase **service-role key never goes in the repo or the client bundle** — if needed, it lives only in a Netlify Function's env vars.
 - Never commit secrets. `.env` is gitignored; `.env.example` documents the shape without values.
 - Enable/keep RLS on every table. Never ship an open database.
@@ -32,12 +32,13 @@ A web app for hosting a Norwegian murder-mystery party game, "Ljåmordet på gri
 - The Supabase schema already exists in `supabase-schema.sql` (tables, seed data, RLS, RPCs). Use those exact table and function names — do not redesign the model.
 - **All writes and all sensitive reads go through the RPCs**, called as `supabase.rpc('name', { params })`. Do not write to tables directly from the client.
 - Key RPCs: `create_game`, `join_game`, `get_my_player`, `host_list_players`, `host_get_suspects`, `host_set_phase`, `host_set_status`, `host_assign_suspect`, `host_auto_assign`, `host_reveal_polaroid`, `set_suspicion`, `get_my_suspicions`, `get_reveal`, and the writeback ones `host_update_suspect`, `host_upsert_polaroid`, `host_delete_polaroid`.
-- Editable content must persist to Supabase, never live only in browser state. Every host edit goes through a writeback RPC and (via Realtime) reaches players' screens.
-- Host identity = secret `host_token` (localStorage). Player identity = secret `player_token` (localStorage). RPCs validate these; the client just passes them.
+- Mystery catalog/authoring RPCs: `list_mysteries` (public, never leaks solutions), `create_mystery`, and the `owner_*` family (`owner_get_mystery`, `owner_update_mystery`, `owner_upsert_suspect`, `owner_set_killer`, `owner_delete_suspect`, `owner_upsert_polaroid`, `owner_delete_polaroid`, `owner_delete_mystery`) — all validated by a secret `owner_token`.
+- Editable content must persist to Supabase, never live only in browser state. Every host/author edit goes through a writeback RPC and (via Realtime, for games) reaches players' screens.
+- Host identity = secret `host_token` (localStorage). Player identity = secret `player_token` (localStorage). Mystery author identity = secret `owner_token` (localStorage list). RPCs validate these; the client just passes them.
 
 ## Conventions
 
-- Suggested layout: `/src`, `/src/lib` (supabase client), `/src/views` (host + player), `/src/styles`, `/supabase/migrations`, `/netlify/functions`.
+- Suggested layout: `/src`, `/src/lib` (supabase client), `/src/views` (host + player + studio), `/src/styles`, `/supabase/migrations`, `/netlify/functions`.
 - One Supabase client module reads env vars; import it everywhere else.
 - Prefer clear, commented code over cleverness — the maintainer is learning this stack.
 - Guests are on phones at a party: mobile-first, with clear loading and error states.
