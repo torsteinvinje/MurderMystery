@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@phosphor-icons/web": "^2.1.2",
     "@supabase/supabase-js": "^2.47.0"
   },
   "devDependencies": {

@@ -7,6 +7,7 @@ import '../styles/main.css'
 import { rpc } from '../lib/supabase.js'
 import { watchGame } from '../lib/realtime.js'
 import { esc, escMultiline } from '../lib/util.js'
+import { icon, I } from '../lib/icons.js'
 import { PHASES, phaseIndex, phaseLabel } from '../lib/phases.js'
 import { loadPlayer, savePlayer, clearPlayer } from '../lib/tokens.js'
 
@@ -154,26 +155,26 @@ function renderJoin() {
   app.innerHTML = `
     <div class="sheet">
       <header class="case-header">
-        <div class="case-no"><span class="brand">MurderMystery</span><span>Bli med</span></div>
+        <div class="case-no"><span class="brand">${icon(I.brand, { lead: true })}MurderMystery</span><span>Bli med</span></div>
         <h1>Bli med på mysteriet</h1>
         <p class="lede">Verten gir deg en firetegns festkode. Tast den inn, så får du
         rollekort, hemmelighet og alibi på din egen telefon.</p>
-        <span class="stamp">Strengt fortrolig</span>
+        <span class="stamp">${icon(I.locked, { lead: true })}Strengt fortrolig</span>
       </header>
 
-      ${state.error ? `<p class="error">${esc(state.error)}</p>` : ''}
+      ${state.error ? `<p class="error">${icon(I.error, { lead: true })}${esc(state.error)}</p>` : ''}
 
       <form id="join-form">
-        <label for="join-code">Festkode</label>
+        <label for="join-code">${icon(I.code, { lead: true })}Festkode</label>
         <input id="join-code" name="code" maxlength="4" autocapitalize="characters"
                autocomplete="off" spellcheck="false" required placeholder="F.eks. KX7M" />
         <label for="join-name">Navnet ditt</label>
         <input id="join-name" name="name" maxlength="40" required placeholder="Slik de andre gjestene kjenner deg" />
-        <button ${state.joining ? 'disabled' : ''}>${state.joining ? 'Åpner saksmappa …' : 'Bli med på festen'}</button>
+        <button ${state.joining ? 'disabled' : ''}>${state.joining ? 'Åpner saksmappa …' : `${icon(I.join, { lead: true })}Bli med på festen`}</button>
       </form>
 
       <footer class="app-footer">
-        <span>Er du verten? <a href="/host.html">Til vertskontrollen →</a></span>
+        <span>Er du verten? <a href="/host.html">${icon(I.host, { lead: true })}Til vertskontrollen</a></span>
       </footer>
     </div>`
 
@@ -190,7 +191,7 @@ function renderGame() {
   parts.push(`
     <header class="case-header">
       <div class="case-no">
-        <span class="brand">MurderMystery · ${esc(game.code)}</span>
+        <span class="brand">${icon(I.brand, { lead: true })}MurderMystery · ${esc(game.code)}</span>
         <span>${esc(player.display_name)}</span>
       </div>
       <h1>${esc(game.title)}</h1>
@@ -227,7 +228,7 @@ function renderGame() {
 
   // Polaroid evidence, as soon as the host has revealed any.
   if (state.polaroids.length > 0 && !state.reveal) {
-    parts.push(`<h2>Bevis fra åstedet</h2>`)
+    parts.push(`<h2>${icon(I.evidence, { lead: true })}Bevis fra åstedet</h2>`)
     parts.push(state.polaroids.map(renderPolaroid).join(''))
   }
 
@@ -239,7 +240,7 @@ function renderGame() {
   parts.push(`
     <footer class="app-footer">
       <span>MurderMystery</span>
-      <a href="#" id="leave-link">Forlat festen</a>
+      <a href="#" id="leave-link">${icon(I.leave, { lead: true })}Forlat festen</a>
     </footer>`)
 
   app.innerHTML = `<div class="sheet">${parts.join('')}</div>`
@@ -264,7 +265,7 @@ function renderRoleCard(suspect) {
   if (!suspect) {
     return `
       <div class="card">
-        <p class="kicker">Din rolle</p>
+        <p class="kicker">${icon(I.role, { lead: true })}Din rolle</p>
         <h3>Etterforsker</h3>
         <p>Du har ingen hemmeligheter — du er vertens høyre hånd. Forhør de
         mistenkte, sammenlign alibier og hjelp festen med å avsløre morderen.</p>
@@ -272,13 +273,15 @@ function renderRoleCard(suspect) {
   }
   return `
     <div class="card">
-      <p class="kicker">Din rolle — vis den ikke til noen</p>
+      <p class="kicker">${icon(I.role, { lead: true })}Din rolle — vis den ikke til noen</p>
       <h3>${esc(suspect.name)}</h3>
       <p class="lede">${esc(suspect.tagline)}</p>
       <p><strong>Dette vet alle:</strong> ${escMultiline(suspect.public_info)}</p>
       <div class="secret-box">
         <button id="secret-toggle" class="btn-quiet">
-          ${state.secretShown ? 'Skjul hemmeligheten' : '🔒 Vis hemmeligheten din (se deg rundt først)'}
+          ${state.secretShown
+            ? `${icon(I.unlocked, { lead: true })}Skjul hemmeligheten`
+            : `${icon(I.locked, { lead: true })}Vis hemmeligheten din (se deg rundt først)`}
         </button>
         ${state.secretShown ? `<div class="secret-content"><strong>Din hemmelighet:</strong> ${escMultiline(suspect.secret)}</div>` : ''}
       </div>
@@ -293,7 +296,7 @@ function renderPolaroid(polaroid) {
       ${
         polaroid.image_url
           ? `<img src="${esc(polaroid.image_url)}" alt="${esc(polaroid.title)}" />`
-          : `<div class="photo-area">📷 Bevisfoto</div>`
+          : `<div class="photo-area">${icon(I.evidence, { lead: true })}Bevisfoto</div>`
       }
       <div class="caption">
         <p class="p-title">${esc(polaroid.title)}</p>
@@ -318,14 +321,14 @@ function renderSuspectList() {
           </div>
           <button class="lupe-btn${level === 3 ? ' max' : ''}" data-suspect="${esc(s.id)}"
                   title="${esc(LUPE_LABELS[level])}" aria-label="${esc(s.name)}: ${esc(LUPE_LABELS[level])}">
-            ${level === 0 ? 'Merk' : '🔍'.repeat(level)}
+            ${level === 0 ? `${icon(I.clue, { lead: true })}Merk` : icon(I.clue).repeat(level)}
           </button>
         </div>`
     })
     .join('')
 
   return `
-    <h2>De mistenkte</h2>
+    <h2>${icon(I.suspects, { lead: true })}De mistenkte</h2>
     <p class="lede">Trykk på lupene for å justere mistanken din: én = litt skummel,
     to = mistenkelig, tre = hovedmistenkt. Bare du ser dine egne luper.</p>
     ${rows}`
@@ -335,7 +338,7 @@ function renderReveal() {
   const { killer, resolution } = state.reveal
   return `
     <div class="reveal-card">
-      <span class="stamp">Sak oppklart</span>
+      <span class="stamp">${icon(I.reveal, { lead: true })}Sak oppklart</span>
       <p class="kicker">Morderen er …</p>
       <p class="killer-name">${esc(killer.name)}</p>
       <p class="lede">${esc(killer.tagline)}</p>

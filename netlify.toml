@@ -7,3 +7,14 @@
 
 [build.environment]
   NODE_VERSION = "22"
+
+# Baseline secure headers. These are safe for the current app; a full
+# Content-Security-Policy is deferred to the auth phase, where it must be
+# tested against the live Supabase REST + Realtime (wss) connections.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), camera=(), microphone=()"

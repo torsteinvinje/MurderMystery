@@ -26,6 +26,22 @@
 
 * { box-sizing: border-box; }
 
+/* --- Icons (Phosphor, regular weight) --------------------------------------
+   Icons are an icon font, so they inherit the surrounding text color and
+   scale with font-size automatically. These rules keep them optically aligned
+   to the text baseline and consistently spaced from any label they lead. */
+.ph {
+  line-height: 1;
+  vertical-align: -0.125em;
+  flex-shrink: 0;
+}
+/* Icon immediately preceding a text label */
+.i-lead { margin-right: 0.5em; }
+/* Slightly tighter alignment inside pills */
+.badge .ph, .stamp .ph { vertical-align: -0.08em; }
+/* Section headings that carry a leading icon */
+h2 .ph, h3 .ph { color: var(--text-faint); vertical-align: -0.1em; }
+
 body {
   margin: 0;
   background: var(--bg);
@@ -47,6 +63,106 @@ body {
 
 @media (min-width: 760px) {
   .sheet { padding: 36px 24px 88px; }
+}
+
+/* --- Top navigation (host-facing pages) -------------------------------------
+   Prominent, consistent nav. The primary action is an accent button; section
+   links show clear hover/focus/active states; the current page is marked with
+   aria-current + a highlight. Collapses to a toggle menu on narrow screens. */
+.topnav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.nav-brand {
+  display: inline-flex;
+  align-items: center;
+  margin-right: auto; /* pushes links + CTA to the right */
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.nav-brand .ph { color: var(--accent); }
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14.5px;
+  transition: background 0.12s, color 0.12s;
+}
+.nav-link:hover { background: var(--surface-soft); color: var(--text); }
+.nav-link.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.nav-link.active .ph { color: var(--accent); }
+.nav-cta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  margin: 0;
+  padding: 9px 17px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 14.5px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.nav-cta:hover { background: var(--accent-strong); filter: none; }
+.nav-cta:active { transform: scale(0.98); }
+.nav-toggle {
+  display: none;
+  margin: 0;
+  min-height: 40px;
+  min-width: 44px;
+  padding: 6px 10px;
+  font-size: 20px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.nav-link:focus-visible,
+.nav-cta:focus-visible,
+.nav-brand:focus-visible,
+.nav-toggle:focus-visible {
+  outline: 3px solid rgba(194, 36, 50, 0.45);
+  outline-offset: 2px;
+}
+@media (max-width: 560px) {
+  .nav-toggle { display: inline-flex; align-items: center; justify-content: center; }
+  .nav-links {
+    display: none;
+    flex-basis: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .nav-links.open { display: flex; }
+  .nav-link, .nav-cta { width: 100%; min-height: 44px; justify-content: flex-start; }
 }
 
 /* --- Header ---------------------------------------------------------------- */
@@ -381,6 +497,12 @@ button:disabled { opacity: 0.55; cursor: wait; }
   color: var(--text-muted);
   font-size: 14px;
   padding: 8px 12px;
+  white-space: nowrap;
+}
+/* On the narrowest phones the tab icon carries the meaning; tighten spacing. */
+@media (max-width: 380px) {
+  .tabnav button { font-size: 13px; padding: 8px 9px; }
+  .tabnav .i-lead { margin-right: 0.32em; }
 }
 .tabnav button:hover { filter: none; background: var(--surface-soft); }
 .tabnav button.active { background: var(--text); color: #fff; }

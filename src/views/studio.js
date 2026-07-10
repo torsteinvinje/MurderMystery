@@ -7,6 +7,8 @@
 import '../styles/main.css'
 import { rpc } from '../lib/supabase.js'
 import { esc, escMultiline } from '../lib/util.js'
+import { icon, I } from '../lib/icons.js'
+import { topNav, wireTopNav } from '../lib/nav.js'
 import { loadStudioList, saveStudioList } from '../lib/tokens.js'
 
 const app = document.querySelector('#app')
@@ -77,7 +79,7 @@ function showFlash(text) {
 }
 
 // Run an owner RPC against the open mystery, then re-fetch it.
-async function ownerAction(name, params = {}, flashText = 'Lagret ✓') {
+async function ownerAction(name, params = {}, flashText = 'Lagret') {
   state.error = ''
   try {
     await rpc(name, { p_owner_token: state.currentToken, ...params })
@@ -161,7 +163,7 @@ function render() {
   if (state.screen === 'list') renderList()
   else renderEditor()
   if (state.flash) {
-    app.insertAdjacentHTML('beforeend', `<div class="flash">${esc(state.flash)}</div>`)
+    app.insertAdjacentHTML('beforeend', `<div class="flash">${icon(I.ok, { lead: true })}${esc(state.flash)}</div>`)
   }
 }
 
@@ -172,30 +174,31 @@ function renderList() {
       <div class="mystery-card">
         <div class="title-row">
           <strong>${esc(m.title)}</strong>
-          <span class="badge${m.ready ? ' ok' : ''}">${m.ready ? 'Klart til å spilles' : 'Uferdig'}</span>
+          <span class="badge${m.ready ? ' ok' : ''}">${m.ready ? `${icon(I.ready, { lead: true })}Klart til å spilles` : `${icon(I.unfinished, { lead: true })}Uferdig`}</span>
         </div>
-        <p class="meta">${m.suspect_count} mistenkte</p>
-        <button class="btn-quiet" data-open="${esc(m.owner_token)}">Rediger</button>
+        <p class="meta">${icon(I.guestsCount, { lead: true })}${m.suspect_count} mistenkte</p>
+        <button class="btn-quiet" data-open="${esc(m.owner_token)}">${icon(I.edit, { lead: true })}Rediger</button>
       </div>`
     )
     .join('')
 
   app.innerHTML = `
     <div class="sheet">
+      ${topNav({ active: 'studio' })}
       <header class="case-header">
-        <div class="case-no"><span class="brand">MurderMystery</span><span>Verkstedet</span></div>
+        <div class="case-no"><span class="brand">${icon(I.brand, { lead: true })}MurderMystery</span><span>Verkstedet</span></div>
         <h1>Lag ditt eget mysterium</h1>
         <p class="lede">Skriv historien, dikt opp de mistenkte, pek ut morderen og legg
         inn bevis. Alt lagres i databasen — og mysteriet dukker opp som valg når en
         vert starter en ny fest.</p>
       </header>
 
-      ${state.error ? `<p class="error">${esc(state.error)}</p>` : ''}
+      ${state.error ? `<p class="error">${icon(I.error, { lead: true })}${esc(state.error)}</p>` : ''}
 
-      <h2>Mine mysterier</h2>
+      <h2>${icon(I.studio, { lead: true })}Mine mysterier</h2>
       ${mineCards || `<p class="notice">Du har ingen egne mysterier på denne enheten ennå.</p>`}
 
-      <h2>Nytt mysterium</h2>
+      <h2>${icon(I.add, { lead: true })}Nytt mysterium</h2>
       <div class="card">
         <form id="new-mystery-form">
           <label for="nm-title">Tittel</label>
@@ -205,16 +208,16 @@ function renderList() {
             <input type="checkbox" name="copy" style="width:auto;" />
             Start med en kopi av «Ljåmordet på grillfesten» (lettere å tilpasse enn å starte blankt)
           </label>
-          <button ${state.busy ? 'disabled' : ''}>${state.busy ? 'Oppretter …' : 'Opprett mysterium'}</button>
+          <button ${state.busy ? 'disabled' : ''}>${state.busy ? 'Oppretter …' : `${icon(I.add, { lead: true })}Opprett mysterium`}</button>
         </form>
       </div>
 
       <footer class="app-footer">
-        <a href="/host.html">← Til vertskontrollen</a>
-        <a href="/">Til festen</a>
+        <span>MurderMystery — Verkstedet</span>
       </footer>
     </div>`
 
+  wireTopNav(app)
   app.querySelectorAll('[data-open]').forEach((btn) =>
     btn.addEventListener('click', () => openEditor(btn.dataset.open))
   )
@@ -231,19 +234,22 @@ function renderEditor() {
 
   app.innerHTML = `
     <div class="sheet">
+      ${topNav({ active: 'studio' })}
       <header class="case-header">
-        <div class="case-no"><span class="brand">MurderMystery</span><span>Verkstedet</span></div>
+        <div class="case-no"><span class="brand">${icon(I.brand, { lead: true })}MurderMystery</span><span>Verkstedet</span></div>
         <h1>${esc(mystery.title)}</h1>
         <p>
           <span class="badge${ready ? ' ok' : ' red'}">
-            ${ready ? 'Klart til å spilles' : killerCount === 0 ? 'Mangler morder' : killerCount > 1 ? 'Flere mordere valgt' : 'Trenger minst to mistenkte'}
+            ${ready
+              ? `${icon(I.ready, { lead: true })}Klart til å spilles`
+              : `${icon(I.unfinished, { lead: true })}${killerCount === 0 ? 'Mangler morder' : killerCount > 1 ? 'Flere mordere valgt' : 'Trenger minst to mistenkte'}`}
           </span>
         </p>
       </header>
 
-      ${state.error ? `<p class="error">${esc(state.error)}</p>` : ''}
+      ${state.error ? `<p class="error">${icon(I.error, { lead: true })}${esc(state.error)}</p>` : ''}
 
-      <h2>Historien</h2>
+      <h2>${icon(I.briefing, { lead: true })}Historien</h2>
       <div class="card">
         <form id="story-form">
           <label>Tittel</label>
@@ -252,45 +258,45 @@ function renderEditor() {
           <textarea name="intro" rows="5">${esc(mystery.intro)}</textarea>
           <label>Oppklaringen (leses høyt ved avsløringen — hold den hemmelig!)</label>
           <textarea name="resolution" rows="5">${esc(mystery.resolution)}</textarea>
-          <button>Lagre historien</button>
+          <button>${icon(I.save, { lead: true })}Lagre historien</button>
         </form>
       </div>
 
-      <h2>Mistenkte (${suspects.length})</h2>
+      <h2>${icon(I.suspects, { lead: true })}Mistenkte (${suspects.length})</h2>
       <p class="lede">Kryss av «Morderen» på nøyaktig én. Spillerne får aldri vite hvem
       det er før verten avslører.</p>
       ${suspects.map(renderSuspectEditor).join('')}
 
-      <h3>Ny mistenkt</h3>
+      <h3>${icon(I.add, { lead: true })}Ny mistenkt</h3>
       <div class="card">
         <form id="new-suspect-form">
           <label>Navn</label>
           <input name="name" maxlength="80" required placeholder="F.eks. «Kokken»" />
           <label>Kort beskrivelse</label>
           <input name="tagline" maxlength="120" placeholder="F.eks. «Kjøkkensjefen med kort lunte»" />
-          <button>Legg til mistenkt</button>
+          <button>${icon(I.add, { lead: true })}Legg til mistenkt</button>
         </form>
       </div>
 
-      <h2>Polaroider — bevisene (${polaroids.length})</h2>
+      <h2>${icon(I.evidence, { lead: true })}Polaroider — bevisene (${polaroids.length})</h2>
       ${polaroids.map(renderPolaroidEditor).join('')}
 
-      <h3>Nytt bevis</h3>
+      <h3>${icon(I.add, { lead: true })}Nytt bevis</h3>
       <div class="card">
         <form id="new-polaroid-form">
           <label>Tittel</label>
           <input name="title" maxlength="120" required placeholder="F.eks. «Sigarettsneipen»" />
           <label>Bildetekst</label>
           <textarea name="caption" placeholder="Hva viser bildet, og hvorfor er det interessant?"></textarea>
-          <button>Legg til bevis</button>
+          <button>${icon(I.add, { lead: true })}Legg til bevis</button>
         </form>
       </div>
 
       <hr class="divider" />
       <div class="btn-row">
-        <button class="btn-quiet" id="back-btn">← Mine mysterier</button>
-        ${ready ? `<button id="host-btn">Start fest med dette mysteriet →</button>` : ''}
-        <button class="btn-danger" id="delete-mystery-btn">Slett mysteriet</button>
+        <button class="btn-quiet" id="back-btn">${icon(I.back, { lead: true })}Mine mysterier</button>
+        ${ready ? `<button id="host-btn">${icon(I.play, { lead: true })}Start fest med dette mysteriet</button>` : ''}
+        <button class="btn-danger" id="delete-mystery-btn">${icon(I.del, { lead: true })}Slett mysteriet</button>
       </div>
 
       <footer class="app-footer">
@@ -306,7 +312,7 @@ function renderSuspectEditor(suspect) {
     <div class="card">
       <div class="title-row" style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
         <h3 style="margin:0;">${esc(suspect.name)}</h3>
-        ${suspect.is_killer ? `<span class="badge red">🔪 Morderen</span>` : ''}
+        ${suspect.is_killer ? `<span class="badge red">${icon(I.reveal, { lead: true })}Morderen</span>` : ''}
       </div>
       <form data-suspect-form="${esc(suspect.id)}">
         <label>Navn</label>
@@ -325,8 +331,8 @@ function renderSuspectEditor(suspect) {
           Morderen
         </label>
         <div class="btn-row">
-          <button>Lagre</button>
-          <button type="button" class="btn-quiet" data-delete-suspect="${esc(suspect.id)}">Slett</button>
+          <button>${icon(I.save, { lead: true })}Lagre</button>
+          <button type="button" class="btn-quiet" data-delete-suspect="${esc(suspect.id)}">${icon(I.del, { lead: true })}Slett</button>
         </div>
       </form>
     </div>`
@@ -343,14 +349,15 @@ function renderPolaroidEditor(polaroid) {
         <label>Bilde-URL (valgfritt)</label>
         <input name="image_url" value="${esc(polaroid.image_url ?? '')}" placeholder="https://…" />
         <div class="btn-row">
-          <button>Lagre</button>
-          <button type="button" class="btn-quiet" data-delete-polaroid="${esc(polaroid.id)}">Slett</button>
+          <button>${icon(I.save, { lead: true })}Lagre</button>
+          <button type="button" class="btn-quiet" data-delete-polaroid="${esc(polaroid.id)}">${icon(I.del, { lead: true })}Slett</button>
         </div>
       </form>
     </div>`
 }
 
 function wireEditorEvents() {
+  wireTopNav(app)
   app.querySelector('#back-btn').addEventListener('click', backToList)
   app.querySelector('#delete-mystery-btn').addEventListener('click', deleteMystery)
   const hostBtn = app.querySelector('#host-btn')
@@ -388,7 +395,7 @@ function wireEditorEvents() {
   app.querySelectorAll('[data-killer]').forEach((radio) =>
     radio.addEventListener('change', () => {
       if (radio.checked) {
-        ownerAction('owner_set_killer', { p_suspect_id: radio.dataset.killer }, 'Morder valgt 🔪')
+        ownerAction('owner_set_killer', { p_suspect_id: radio.dataset.killer }, 'Morder valgt')
       }
     })
   )

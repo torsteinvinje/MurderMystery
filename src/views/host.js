@@ -7,6 +7,8 @@ import '../styles/main.css'
 import { rpc } from '../lib/supabase.js'
 import { watchGame } from '../lib/realtime.js'
 import { esc, escMultiline } from '../lib/util.js'
+import { icon, I } from '../lib/icons.js'
+import { topNav, wireTopNav } from '../lib/nav.js'
 import { PHASES, phaseIndex } from '../lib/phases.js'
 import { loadHost, saveHost, clearHost } from '../lib/tokens.js'
 
@@ -179,7 +181,7 @@ function render() {
     renderDashboard()
   }
   if (state.flash) {
-    app.insertAdjacentHTML('beforeend', `<div class="flash">${esc(state.flash)}</div>`)
+    app.insertAdjacentHTML('beforeend', `<div class="flash">${icon(I.ok, { lead: true })}${esc(state.flash)}</div>`)
   }
 }
 
@@ -202,9 +204,9 @@ function renderLanding() {
              style="cursor:${m.ready ? 'pointer' : 'default'};">
           <div class="title-row">
             <strong>${esc(m.title)}</strong>
-            <span class="badge${m.ready ? ' ok' : ''}">${m.ready ? 'Klart til å spilles' : 'Uferdig'}</span>
+            <span class="badge${m.ready ? ' ok' : ''}">${m.ready ? `${icon(I.ready, { lead: true })}Klart til å spilles` : `${icon(I.unfinished, { lead: true })}Uferdig`}</span>
           </div>
-          <p class="meta">${m.suspect_count} mistenkte · ${m.polaroid_count} bevis${m.is_builtin ? ' · innebygd' : ''}</p>
+          <p class="meta">${icon(I.guestsCount, { lead: true })}${m.suspect_count} mistenkte · ${icon(I.evidence, { lead: true })}${m.polaroid_count} bevis${m.is_builtin ? ` · ${icon(I.builtin, { lead: true })}innebygd` : ''}</p>
           ${selected ? `<p>${esc(String(m.intro).slice(0, 180))}${String(m.intro).length > 180 ? '…' : ''}</p>` : ''}
         </div>`
     })
@@ -214,31 +216,33 @@ function renderLanding() {
 
   app.innerHTML = `
     <div class="sheet">
+      ${topNav({ active: 'host' })}
       <header class="case-header">
-        <div class="case-no"><span class="brand">MurderMystery</span><span>Vertskontroll</span></div>
+        <div class="case-no"><span class="brand">${icon(I.brand, { lead: true })}MurderMystery</span><span>Vertskontroll</span></div>
         <h1>Start en fest</h1>
         <p class="lede">Du er verten: du styrer kvelden, deler ut roller, legger fram
         bevis — og du er den eneste som vet hvem morderen er. Velg et mysterium og
         trykk på knappen, så får du en firetegns festkode gjestene bruker for å bli med.</p>
       </header>
 
-      ${state.error ? `<p class="error">${esc(state.error)}</p>` : ''}
+      ${state.error ? `<p class="error">${icon(I.error, { lead: true })}${esc(state.error)}</p>` : ''}
 
-      <h2>Velg mysterium</h2>
+      <h2>${icon(I.tabRegi, { lead: true })}Velg mysterium</h2>
       ${cards || `<p class="notice">Fant ingen mysterier. Er databaseskjemaet kjørt i Supabase?</p>`}
 
       <button id="create-btn" ${state.busy || !selected ? 'disabled' : ''}>
-        ${state.busy ? 'Oppretter fest …' : selected ? `Start fest med «${esc(selected.title)}»` : 'Velg et mysterium først'}
+        ${state.busy ? 'Oppretter fest …' : selected ? `${icon(I.play, { lead: true })}Start fest med «${esc(selected.title)}»` : 'Velg et mysterium først'}
       </button>
 
       <p class="lede" style="margin-top:18px;">Vil du lage ditt eget mysterium, med
-      egne mistenkte og egen morder? <a href="/studio.html">Åpne verkstedet →</a></p>
+      egne mistenkte og egen morder? <a href="/studio.html">${icon(I.studio, { lead: true })}Åpne verkstedet</a></p>
 
       <footer class="app-footer">
-        <span>Skal du være gjest i stedet? <a href="/">Til festen →</a></span>
+        <span>MurderMystery</span>
       </footer>
     </div>`
 
+  wireTopNav(app)
   app.querySelectorAll('[data-mystery]').forEach((card) =>
     card.addEventListener('click', () => {
       const mystery = state.catalog.find((m) => m.id === card.dataset.mystery)
@@ -253,32 +257,33 @@ function renderLanding() {
 function renderDashboard() {
   const game = state.game
   const tabs = [
-    ['regi', 'Regi'],
-    ['spillere', `Spillere (${state.players.length})`],
-    ['mistenkte', 'Mistenkte'],
-    ['polaroider', 'Polaroider'],
-    ['avsloring', 'Avsløring'],
+    ['regi', 'Regi', I.tabRegi],
+    ['spillere', `Spillere (${state.players.length})`, I.tabPlayers],
+    ['mistenkte', 'Mistenkte', I.tabSuspects],
+    ['polaroider', 'Polaroider', I.tabPolaroids],
+    ['avsloring', 'Avsløring', I.tabReveal],
   ]
 
   app.innerHTML = `
     <div class="sheet">
+      ${topNav({ active: 'host', newFestInPage: true })}
       <header class="case-header">
         <div class="case-no">
-          <span class="brand">MurderMystery</span>
+          <span class="brand">${icon(I.brand, { lead: true })}MurderMystery</span>
           <span>${game.status === 'revealed' ? 'Sak oppklart' : 'Vertskontroll'}</span>
         </div>
         <h1>${esc(game.title)}</h1>
-        <p class="lede">Gjestene blir med på forsiden av appen med denne koden:</p>
+        <p class="lede">${icon(I.code, { lead: true })}Gjestene blir med på forsiden av appen med denne koden:</p>
         <div class="code-display">${esc(game.code)}</div>
       </header>
 
-      ${state.error ? `<p class="error">${esc(state.error)}</p>` : ''}
+      ${state.error ? `<p class="error">${icon(I.error, { lead: true })}${esc(state.error)}</p>` : ''}
 
       <nav class="tabnav">
         ${tabs
           .map(
-            ([id, label]) =>
-              `<button data-tab="${id}" class="${state.tab === id ? 'active' : ''}">${label}</button>`
+            ([id, label, iconName]) =>
+              `<button data-tab="${id}" class="${state.tab === id ? 'active' : ''}">${icon(iconName, { lead: true })}${label}</button>`
           )
           .join('')}
       </nav>
@@ -287,13 +292,11 @@ function renderDashboard() {
 
       <footer class="app-footer">
         <span>Festkode ${esc(game.code)}</span>
-        <span>
-          <a href="/studio.html">Verkstedet</a> ·
-          <a href="#" id="new-game-link">Start ny fest</a>
-        </span>
       </footer>
     </div>`
 
+  // Nav's "Start ny fest" button ends the current party and returns to landing.
+  wireTopNav(app, { onNewFest: newGame })
   // Wire up everything that exists in the current tab.
   app.querySelectorAll('[data-tab]').forEach((btn) =>
     btn.addEventListener('click', () => {
@@ -301,10 +304,6 @@ function renderDashboard() {
       render()
     })
   )
-  app.querySelector('#new-game-link').addEventListener('click', (e) => {
-    e.preventDefault()
-    newGame()
-  })
   wireTabEvents()
 }
 
@@ -335,18 +334,18 @@ function renderRegi() {
         ${
           isCurrent
             ? ''
-            : `<button class="btn-quiet" data-phase="${phase.id}">Gå hit</button>`
+            : `<button class="btn-quiet" data-phase="${phase.id}">${icon(I.next, { lead: true })}Gå hit</button>`
         }
       </div>`
   }).join('')
 
   return `
-    <h2>Kveldens regi</h2>
+    <h2>${icon(I.tabRegi, { lead: true })}Kveldens regi</h2>
     <p class="lede">Spillernes skjermer følger fasen du velger her — de oppdateres i
     samme øyeblikk du bytter.</p>
     ${steps}
     <details class="editor">
-      <summary>Åstedsrapporten (les høyt i fase 1)</summary>
+      <summary>${icon(I.briefing, { lead: true })}Åstedsrapporten (les høyt i fase 1)</summary>
       <div class="card"><p>${escMultiline(state.game.intro)}</p></div>
     </details>`
 }
@@ -381,7 +380,7 @@ function renderSpillere() {
     .join('')
 
   return `
-    <h2>Gjestene</h2>
+    <h2>${icon(I.tabPlayers, { lead: true })}Gjestene</h2>
     ${
       state.players.length === 0
         ? `<p class="notice">Ingen har meldt seg inn ennå. Be gjestene gå til forsiden
@@ -389,7 +388,7 @@ function renderSpillere() {
         : rows
     }
     <div class="btn-row">
-      <button id="auto-assign-btn">Del ut ledige roller automatisk</button>
+      <button id="auto-assign-btn">${icon(I.shuffle, { lead: true })}Del ut ledige roller automatisk</button>
     </div>
     <p class="lede">Er dere flere enn ${state.suspects.length} gjester, blir resten
     etterforskere — de er med og løser saken, men har ingen hemmelighet.</p>`
@@ -403,7 +402,7 @@ function renderMistenkte() {
       (s) => `
       <div class="card">
         <p class="kicker">Mistenkt nr. ${s.sort_order}
-          ${state.showSolution && s.is_killer ? ' — <span class="stamp">🔪 morderen</span>' : ''}
+          ${state.showSolution && s.is_killer ? ` — <span class="stamp">${icon(I.reveal, { lead: true })}morderen</span>` : ''}
         </p>
         <h3>${esc(s.name)}</h3>
         <p class="lede">${esc(s.tagline)}</p>
@@ -411,14 +410,14 @@ function renderMistenkte() {
         <p><strong>Hemmelighet:</strong> ${escMultiline(s.secret)}</p>
         <div class="alibi">«${escMultiline(s.alibi)}»</div>
         <details class="editor">
-          <summary>✏️ Rediger denne mistenkte</summary>
+          <summary>${icon(I.edit, { lead: true })}Rediger denne mistenkte</summary>
           <form data-hold data-edit-suspect="${esc(s.id)}">
             <label>Navn <input name="name" value="${esc(s.name)}" maxlength="80" required /></label>
             <label>Kort beskrivelse <input name="tagline" value="${esc(s.tagline)}" maxlength="120" /></label>
             <label>Dette vet alle <textarea name="public_info">${esc(s.public_info)}</textarea></label>
             <label>Hemmelighet <textarea name="secret">${esc(s.secret)}</textarea></label>
             <label>Alibi <textarea name="alibi">${esc(s.alibi)}</textarea></label>
-            <button>Lagre endringene</button>
+            <button>${icon(I.save, { lead: true })}Lagre endringene</button>
           </form>
         </details>
       </div>`
@@ -426,11 +425,13 @@ function renderMistenkte() {
     .join('')
 
   return `
-    <h2>De mistenkte</h2>
+    <h2>${icon(I.tabSuspects, { lead: true })}De mistenkte</h2>
     <p class="lede">Endringer lagres i databasen og dukker opp på gjestenes
     telefoner med en gang. Hvem som er morderen kan ikke endres.</p>
     <button class="btn-quiet" id="toggle-solution">
-      ${state.showSolution ? 'Skjul løsningen' : '🔒 Vis hvem morderen er (pass på hvem som ser skjermen)'}
+      ${state.showSolution
+        ? `${icon(I.unlocked, { lead: true })}Skjul løsningen`
+        : `${icon(I.locked, { lead: true })}Vis hvem morderen er (pass på hvem som ser skjermen)`}
     </button>
     ${cards}`
 }
@@ -445,26 +446,26 @@ function renderPolaroider() {
         ${
           p.image_url
             ? `<img src="${esc(p.image_url)}" alt="${esc(p.title)}" />`
-            : `<div class="photo-area">📷 Bevisfoto</div>`
+            : `<div class="photo-area">${icon(I.evidence, { lead: true })}Bevisfoto</div>`
         }
         <div class="caption">
           <p class="p-title">${esc(p.title)}
-            <span class="badge${p.revealed ? ' red' : ''}">${p.revealed ? 'Synlig for alle' : 'Skjult'}</span>
+            <span class="badge${p.revealed ? ' red' : ''}">${p.revealed ? `${icon(I.show, { lead: true })}Synlig for alle` : `${icon(I.hide, { lead: true })}Skjult`}</span>
           </p>
           <p>${escMultiline(p.caption)}</p>
           <div class="btn-row">
             <button class="btn-quiet" data-toggle-polaroid="${esc(p.id)}" data-revealed="${p.revealed}">
-              ${p.revealed ? 'Skjul for gjestene' : 'Avslør for gjestene'}
+              ${p.revealed ? `${icon(I.hide, { lead: true })}Skjul for gjestene` : `${icon(I.show, { lead: true })}Avslør for gjestene`}
             </button>
-            <button class="btn-quiet" data-delete-polaroid="${esc(p.id)}">Slett</button>
+            <button class="btn-quiet" data-delete-polaroid="${esc(p.id)}">${icon(I.del, { lead: true })}Slett</button>
           </div>
           <details class="editor">
-            <summary>✏️ Rediger</summary>
+            <summary>${icon(I.edit, { lead: true })}Rediger</summary>
             <form data-hold data-edit-polaroid="${esc(p.id)}">
               <label>Tittel <input name="title" value="${esc(p.title)}" maxlength="120" required /></label>
               <label>Bildetekst <textarea name="caption">${esc(p.caption)}</textarea></label>
               <label>Bilde-URL (valgfritt) <input name="image_url" value="${esc(p.image_url ?? '')}" placeholder="https://…" /></label>
-              <button>Lagre</button>
+              <button>${icon(I.save, { lead: true })}Lagre</button>
             </form>
           </details>
         </div>
@@ -473,17 +474,17 @@ function renderPolaroider() {
     .join('')
 
   return `
-    <h2>Polaroider — bevisene</h2>
+    <h2>${icon(I.tabPolaroids, { lead: true })}Polaroider — bevisene</h2>
     <p class="lede">Avslør dem ett og ett i ledetråd-fasen, og les dem høyt.
     Skjulte polaroider er usynlige for gjestene.</p>
     ${cards}
     <hr class="divider" />
-    <h3>Nytt polaroid</h3>
+    <h3>${icon(I.add, { lead: true })}Nytt polaroid</h3>
     <form data-hold id="new-polaroid-form">
       <label>Tittel <input name="title" maxlength="120" required placeholder="F.eks. «Sigarettsneipen»" /></label>
       <label>Bildetekst <textarea name="caption" placeholder="Hva viser bildet, og hvorfor er det interessant?"></textarea></label>
       <label>Bilde-URL (valgfritt) <input name="image_url" placeholder="https://…" /></label>
-      <button>Legg til bevis</button>
+      <button>${icon(I.add, { lead: true })}Legg til bevis</button>
     </form>`
 }
 
@@ -493,7 +494,7 @@ function renderAvsloring() {
   const revealed = state.game.status === 'revealed'
 
   const tally = `
-    <h3>Festens mistanker (live)</h3>
+    <h3>${icon(I.tally, { lead: true })}Festens mistanker (live)</h3>
     <table class="tally">
       <thead><tr><th>Mistenkt</th><th>Lupepoeng</th><th>Hovedmistenkt-merker</th></tr></thead>
       <tbody>
@@ -503,7 +504,7 @@ function renderAvsloring() {
           <tr>
             <td>${esc(row.name)}</td>
             <td>${row.total}</td>
-            <td>${row.top_marks > 0 ? '🔍'.repeat(Math.min(row.top_marks, 8)) + ` (${row.top_marks})` : '—'}</td>
+            <td>${row.top_marks > 0 ? icon(I.clue).repeat(Math.min(row.top_marks, 8)) + ` (${row.top_marks})` : '—'}</td>
           </tr>`
           )
           .join('')}
@@ -513,10 +514,10 @@ function renderAvsloring() {
   if (revealed) {
     const killer = state.suspects.find((s) => s.is_killer)
     return `
-      <h2>Saken er oppklart</h2>
+      <h2>${icon(I.reveal, { lead: true })}Saken er oppklart</h2>
       ${tally}
       <div class="reveal-card">
-        <span class="stamp">Sak oppklart</span>
+        <span class="stamp">${icon(I.reveal, { lead: true })}Sak oppklart</span>
         <p class="kicker">Morderen er …</p>
         <p class="killer-name">${esc(killer?.name ?? '')}</p>
         <p class="lede">${esc(killer?.tagline ?? '')}</p>
@@ -525,7 +526,7 @@ function renderAvsloring() {
   }
 
   return `
-    <h2>Avsløringen</h2>
+    <h2>${icon(I.tabReveal, { lead: true })}Avsløringen</h2>
     ${tally}
     <div class="card">
       <p class="kicker">Punkt uten retur</p>
@@ -534,13 +535,13 @@ function renderAvsloring() {
       over først.</p>
       ${
         state.confirmReveal
-          ? `<button class="btn-reveal" id="reveal-btn">ER DU SIKKER? Trykk igjen for å avsløre</button>
+          ? `<button class="btn-reveal" id="reveal-btn">${icon(I.reveal, { lead: true })}ER DU SIKKER? Trykk igjen for å avsløre</button>
              <button class="btn-quiet" id="reveal-cancel">Avbryt</button>`
-          : `<button class="btn-reveal" id="reveal-btn">🔪 Avslør morderen</button>`
+          : `<button class="btn-reveal" id="reveal-btn">${icon(I.reveal, { lead: true })}Avslør morderen</button>`
       }
     </div>
     <details class="editor">
-      <summary>🔒 Kikk på oppklaringen (kun for dine øyne)</summary>
+      <summary>${icon(I.locked, { lead: true })}Kikk på oppklaringen (kun for dine øyne)</summary>
       <div class="card"><p>${escMultiline(state.game.resolution)}</p></div>
     </details>`
 }
@@ -586,7 +587,7 @@ function wireTabEvents() {
         p_public_info: f.public_info.value,
         p_secret: f.secret.value,
         p_alibi: f.alibi.value,
-      }, 'Lagret ✓')
+      }, 'Lagret')
     })
   )
 
@@ -615,7 +616,7 @@ function wireTabEvents() {
         p_title: f.title.value,
         p_caption: f.caption.value,
         p_image_url: f.image_url.value || null,
-      }, 'Lagret ✓')
+      }, 'Lagret')
     })
   )
   const newPolaroidForm = app.querySelector('#new-polaroid-form')
