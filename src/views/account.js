@@ -192,12 +192,24 @@ async function onProfileSave(e) {
   const first = f.first_name.value
   const last = f.last_name.value
   if (!first.trim() || !last.trim()) return fail('Fyll inn både fornavn og etternavn.')
-  await run(async () => {
+  if (state.busy) return
+
+  // Unlike the login/register flows (which use generic errors on purpose),
+  // saving your own name should surface the real reason it failed.
+  state.busy = true
+  state.error = ''
+  state.notice = ''
+  render()
+  try {
     await rpc('update_my_profile', { p_first: first, p_last: last })
     await loadProfile()
     state.notice = 'Navnet er lagret.'
+  } catch (err) {
+    state.error = err.message || 'Kunne ikke lagre navnet. Prøv igjen.'
+  } finally {
+    state.busy = false
     render() // re-renders the nav too, so the top-right name updates
-  })
+  }
 }
 
 // Run an async action with the busy flag (prevents duplicate submits).
