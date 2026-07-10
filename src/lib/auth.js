@@ -7,7 +7,7 @@
 // can only ever return the user to THIS app's own origin — never an arbitrary
 // external URL. The matching URLs must be added to Supabase's redirect
 // allowlist (see README).
-import { supabase } from './supabase.js'
+import { supabase, rpc } from './supabase.js'
 
 export const PASSWORD_MIN = 8
 
@@ -23,6 +23,25 @@ export async function getSession() {
   return data.session
 }
 
+// Lightweight snapshot for the nav: are we logged in, and under what name?
+// Falls back to the email if the profile can't be read.
+export async function currentAccount() {
+  const session = await getSession()
+  if (!session) return { loggedIn: false }
+  try {
+    const p = await rpc('get_my_profile')
+    return {
+      loggedIn: true,
+      displayName: (p.display_name || '').trim(),
+      firstName: p.first_name || '',
+      lastName: p.last_name || '',
+      email: session.user?.email || '',
+    }
+  } catch {
+    return { loggedIn: true, displayName: '', email: session.user?.email || '' }
+  }
+}
+
 // Subscribe to sign-in / sign-out / password-recovery events. Returns an
 // unsubscribe function.
 export function onAuthChange(callback) {
@@ -30,12 +49,16 @@ export function onAuthChange(callback) {
   return () => data.subscription.unsubscribe()
 }
 
-export function register({ email, password, displayName }) {
+export function register({ email, password, firstName, lastName }) {
+  const first = (firstName || '').trim()
+  const last = (lastName || '').trim()
   return supabase.auth.signUp({
     email: email.trim(),
     password,
     options: {
-      data: { display_name: (displayName || '').trim() },
+      // display_name is set here too, so the name shows up even before the
+      // profile-names migration (00005) has been applied.
+      data: { first_name: first, last_name: last, display_name: `${first} ${last}`.trim() },
       emailRedirectTo: authRedirect(),
     },
   })

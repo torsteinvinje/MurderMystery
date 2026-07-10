@@ -30,6 +30,8 @@ const state = {
   error: '',
   notice: '',
   email: '', // preserved across screens so a switch doesn't lose typing
+  firstName: '',
+  lastName: '',
   profile: null,
   next: '/host.html', // where to go after a successful login
 }
@@ -109,14 +111,18 @@ async function onRegister(e) {
   const f = e.target.elements
   const email = f.email.value
   const password = f.password.value
-  const displayName = f.display_name.value
+  const firstName = f.first_name.value
+  const lastName = f.last_name.value
 
+  state.firstName = firstName
+  state.lastName = lastName
+  if (!firstName.trim() || !lastName.trim()) return fail('Fyll inn både fornavn og etternavn.')
   if (!validEmail(email)) return fail('Skriv inn en gyldig e-postadresse.')
   if (password.length < PASSWORD_MIN) return fail(`Passordet må være minst ${PASSWORD_MIN} tegn.`)
 
   state.email = email
   await run(async () => {
-    const { error } = await register({ email, password, displayName })
+    const { error } = await register({ email, password, firstName, lastName })
     // Do not reveal whether the address already exists: on any non-error,
     // show the same neutral "check your inbox" screen.
     if (error) {
@@ -177,6 +183,20 @@ async function onLogout() {
   await run(async () => {
     await logout()
     // SIGNED_OUT handler resets to the login screen.
+  })
+}
+
+async function onProfileSave(e) {
+  e.preventDefault()
+  const f = e.target.elements
+  const first = f.first_name.value
+  const last = f.last_name.value
+  if (!first.trim() || !last.trim()) return fail('Fyll inn både fornavn og etternavn.')
+  await run(async () => {
+    await rpc('update_my_profile', { p_first: first, p_last: last })
+    await loadProfile()
+    state.notice = 'Navnet er lagret.'
+    render() // re-renders the nav too, so the top-right name updates
   })
 }
 
@@ -300,8 +320,10 @@ function viewRegister() {
     ${messages()}
     <div class="card">
       <form id="form-register" novalidate>
-        <label for="reg-name">Visningsnavn</label>
-        <input id="reg-name" name="display_name" type="text" autocomplete="name" maxlength="60" />
+        <label for="reg-first">Fornavn</label>
+        <input id="reg-first" name="first_name" type="text" autocomplete="given-name" maxlength="60" required value="${esc(state.firstName)}" />
+        <label for="reg-last">Etternavn</label>
+        <input id="reg-last" name="last_name" type="text" autocomplete="family-name" maxlength="60" required value="${esc(state.lastName)}" />
         <label for="reg-email">E-post</label>
         <input id="reg-email" name="email" type="email" autocomplete="email"
                required value="${esc(state.email)}" />
@@ -363,13 +385,28 @@ function viewConfirmPending() {
 }
 
 function viewAccount() {
-  const name = state.profile?.display_name?.trim()
+  const p = state.profile || {}
+  const name = (p.display_name || '').trim()
   return `
     ${messages()}
     <div class="card">
       <p class="kicker">Innlogget som</p>
-      <h3 style="margin-top:2px;">${name ? esc(name) : 'Vert'}</h3>
+      <h3 style="margin-top:2px;">${name ? esc(name) : 'Vert (uten navn ennå)'}</h3>
       <p class="lede">Kontoen din er bekreftet og aktiv.</p>
+
+      <details class="editor" ${name ? '' : 'open'}>
+        <summary>${icon(I.edit, { lead: true })}${name ? 'Endre navn' : 'Legg til navnet ditt'}</summary>
+        <form id="form-profile" novalidate>
+          <label for="pf-first">Fornavn</label>
+          <input id="pf-first" name="first_name" type="text" autocomplete="given-name"
+                 maxlength="60" required value="${esc(p.first_name || '')}" />
+          <label for="pf-last">Etternavn</label>
+          <input id="pf-last" name="last_name" type="text" autocomplete="family-name"
+                 maxlength="60" required value="${esc(p.last_name || '')}" />
+          <button ${state.busy ? 'disabled' : ''}>${submitLabel('Lagrer …', 'Lagre navn', I.save)}</button>
+        </form>
+      </details>
+
       <div class="btn-row">
         <a class="nav-cta" href="/host.html">${icon(I.play, { lead: true })}Start en fest</a>
         <a class="btn-quiet" href="/studio.html" style="display:inline-flex;align-items:center;text-decoration:none;">${icon(I.studio, { lead: true })}Verkstedet</a>
@@ -388,6 +425,7 @@ function wireViewEvents() {
   bind('#form-register', onRegister)
   bind('#form-forgot', onForgot)
   bind('#form-reset', onReset)
+  bind('#form-profile', onProfileSave)
   const logoutBtn = app.querySelector('#logout-btn')
   if (logoutBtn) logoutBtn.addEventListener('click', onLogout)
 }
