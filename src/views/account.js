@@ -15,6 +15,8 @@ import { rpc } from '../lib/supabase.js'
 import { esc } from '../lib/util.js'
 import { icon, I } from '../lib/icons.js'
 import { topNav, wireTopNav } from '../lib/nav.js'
+import { hero } from '../lib/hero.js'
+import heroAccount from '../assets/mood/hallway.webp'
 import {
   PASSWORD_MIN, validEmail, getSession, onAuthChange,
   register, login, logout, requestPasswordReset, setNewPassword, safeNext,
@@ -223,6 +225,16 @@ function passwordError(error) {
 // Rendering
 // --------------------------------------------------------------------------
 
+// Per-view hero titles, so the mood banner narrates the current step.
+const HERO_META = {
+  login: { title: 'Logg inn som vert', lede: 'Logg inn for å lage og styre dine egne mysterier.' },
+  register: { title: 'Registrer vertskonto', lede: 'Opprett en konto for å lage egne mordmysterier.' },
+  forgot: { title: 'Glemt passord', lede: 'Vi sender deg en lenke for å lage nytt passord.' },
+  reset: { title: 'Lag nytt passord', lede: 'Velg et nytt passord for kontoen din.' },
+  'confirm-pending': { title: 'Bekreft e-posten din', lede: '' },
+  account: { title: 'Min konto', lede: '' },
+}
+
 function render() {
   const body =
     state.view === 'loading' ? `<p class="notice">Laster …</p>`
@@ -233,9 +245,16 @@ function render() {
     : state.view === 'account' ? viewAccount()
     : viewLogin()
 
+  const meta = HERO_META[state.view] || HERO_META.login
+  const banner =
+    state.view === 'loading'
+      ? ''
+      : hero({ image: heroAccount, context: 'Vertskonto', title: meta.title, lede: meta.lede })
+
   app.innerHTML = `
     <div class="sheet">
       ${topNav({ active: 'konto' })}
+      ${banner}
       <main>${body}</main>
       <footer class="app-footer"><span>MurderMystery — Vertskonto</span></footer>
     </div>`
@@ -258,10 +277,6 @@ const submitLabel = (busyText, label, iconName) =>
 
 function viewLogin() {
   return `
-    <header class="case-header">
-      <h1>${icon(I.host, { lead: true })}Logg inn som vert</h1>
-      <p class="lede">Logg inn for å lage og styre dine egne mysterier.</p>
-    </header>
     ${messages()}
     <div class="card">
       <form id="form-login" novalidate>
@@ -282,10 +297,6 @@ function viewLogin() {
 
 function viewRegister() {
   return `
-    <header class="case-header">
-      <h1>${icon(I.account, { lead: true })}Registrer vertskonto</h1>
-      <p class="lede">Opprett en konto for å lage egne mordmysterier.</p>
-    </header>
     ${messages()}
     <div class="card">
       <form id="form-register" novalidate>
@@ -308,10 +319,6 @@ function viewRegister() {
 
 function viewForgot() {
   return `
-    <header class="case-header">
-      <h1>${icon(I.password, { lead: true })}Glemt passord</h1>
-      <p class="lede">Skriv inn e-posten din, så sender vi en lenke for å lage nytt passord.</p>
-    </header>
     ${messages()}
     <div class="card">
       <form id="form-forgot" novalidate>
@@ -328,10 +335,6 @@ function viewForgot() {
 
 function viewReset() {
   return `
-    <header class="case-header">
-      <h1>${icon(I.password, { lead: true })}Lag nytt passord</h1>
-      <p class="lede">Velg et nytt passord for kontoen din.</p>
-    </header>
     ${messages()}
     <div class="card">
       <form id="form-reset" novalidate>
@@ -348,9 +351,6 @@ function viewReset() {
 
 function viewConfirmPending() {
   return `
-    <header class="case-header">
-      <h1>${icon(I.mail, { lead: true })}Bekreft e-posten din</h1>
-    </header>
     ${messages()}
     <div class="card">
       <p>Vi har sendt en bekreftelseslenke til <strong>${esc(state.email)}</strong>.
@@ -365,9 +365,6 @@ function viewConfirmPending() {
 function viewAccount() {
   const name = state.profile?.display_name?.trim()
   return `
-    <header class="case-header">
-      <h1>${icon(I.account, { lead: true })}Min konto</h1>
-    </header>
     ${messages()}
     <div class="card">
       <p class="kicker">Innlogget som</p>

@@ -8,6 +8,8 @@ import { rpc } from '../lib/supabase.js'
 import { watchGame } from '../lib/realtime.js'
 import { esc, escMultiline } from '../lib/util.js'
 import { icon, I } from '../lib/icons.js'
+import { hero } from '../lib/hero.js'
+import heroJoin from '../assets/mood/study.webp'
 import { PHASES, phaseIndex, phaseLabel } from '../lib/phases.js'
 import { loadPlayer, savePlayer, clearPlayer } from '../lib/tokens.js'
 
@@ -154,13 +156,12 @@ function render() {
 function renderJoin() {
   app.innerHTML = `
     <div class="sheet">
-      <header class="case-header">
-        <div class="case-no"><span class="brand">${icon(I.brand, { lead: true })}MurderMystery</span><span>Bli med</span></div>
-        <h1>Bli med på mysteriet</h1>
-        <p class="lede">Verten gir deg en firetegns festkode. Tast den inn, så får du
-        rollekort, hemmelighet og alibi på din egen telefon.</p>
-        <span class="stamp">${icon(I.locked, { lead: true })}Strengt fortrolig</span>
-      </header>
+      ${hero({
+        image: heroJoin,
+        context: 'Strengt fortrolig',
+        title: 'Bli med på mysteriet',
+        lede: 'Tast inn festkoden, så får du rollekort, hemmelighet og alibi rett på telefonen.',
+      })}
 
       ${state.error ? `<p class="error">${icon(I.error, { lead: true })}${esc(state.error)}</p>` : ''}
 

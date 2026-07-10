@@ -9,6 +9,8 @@ import { watchGame } from '../lib/realtime.js'
 import { esc, escMultiline } from '../lib/util.js'
 import { icon, I } from '../lib/icons.js'
 import { topNav, wireTopNav } from '../lib/nav.js'
+import { hero } from '../lib/hero.js'
+import heroHost from '../assets/mood/suspects.webp'
 import { PHASES, phaseIndex } from '../lib/phases.js'
 import { loadHost, saveHost, clearHost } from '../lib/tokens.js'
 
@@ -244,13 +246,12 @@ function renderLanding() {
   app.innerHTML = `
     <div class="sheet">
       ${topNav({ active: 'host' })}
-      <header class="case-header">
-        <div class="case-no"><span class="brand">${icon(I.brand, { lead: true })}MurderMystery</span><span>Vertskontroll</span></div>
-        <h1>Start en fest</h1>
-        <p class="lede">Du er verten: du styrer kvelden, deler ut roller, legger fram
-        bevis — og du er den eneste som vet hvem morderen er. Velg et mysterium og
-        trykk på knappen, så får du en firetegns festkode gjestene bruker for å bli med.</p>
-      </header>
+      ${hero({
+        image: heroHost,
+        context: 'Vertskontroll',
+        title: 'Start en fest',
+        lede: 'Du styrer kvelden og er den eneste som vet hvem morderen er. Velg et mysterium for å få en festkode.',
+      })}
 
       ${state.error ? `<p class="error">${icon(I.error, { lead: true })}${esc(state.error)}</p>` : ''}
 

@@ -9,6 +9,8 @@ import { rpc } from '../lib/supabase.js'
 import { esc, escMultiline } from '../lib/util.js'
 import { icon, I } from '../lib/icons.js'
 import { topNav, wireTopNav } from '../lib/nav.js'
+import { hero } from '../lib/hero.js'
+import heroStudio from '../assets/mood/desk.webp'
 import { loadStudioList, saveStudioList } from '../lib/tokens.js'
 
 const app = document.querySelector('#app')
@@ -185,13 +187,12 @@ function renderList() {
   app.innerHTML = `
     <div class="sheet">
       ${topNav({ active: 'studio' })}
-      <header class="case-header">
-        <div class="case-no"><span class="brand">${icon(I.brand, { lead: true })}MurderMystery</span><span>Verkstedet</span></div>
-        <h1>Lag ditt eget mysterium</h1>
-        <p class="lede">Skriv historien, dikt opp de mistenkte, pek ut morderen og legg
-        inn bevis. Alt lagres i databasen — og mysteriet dukker opp som valg når en
-        vert starter en ny fest.</p>
-      </header>
+      ${hero({
+        image: heroStudio,
+        context: 'Verkstedet',
+        title: 'Lag ditt eget mysterium',
+        lede: 'Skriv historien, dikt opp de mistenkte, pek ut morderen og legg inn bevis.',
+      })}
 
       ${state.error ? `<p class="error">${icon(I.error, { lead: true })}${esc(state.error)}</p>` : ''}
 

@@ -1,6 +1,11 @@
 # Dependencies
 node_modules/
 
+# Source art (heavy). Only the optimized src/assets/mood/*.webp are committed;
+# regenerate them with: node scripts/optimize-mood-images.mjs
+murder_mystery_images.zip
+mood-src/
+
 # Build output
 dist/
 dist-ssr/
