@@ -413,10 +413,22 @@ function renderRegi() {
       </div>`
   }).join('')
 
+  // The kjøreplan contains the solution — host-only by design (it only ever
+  // arrives via host_get_game) and folded shut in case the screen is visible.
+  const runbook = (state.game.runbook || '').trim()
+
   return `
     <h2>${icon(I.tabRegi, { lead: true })}Kveldens regi</h2>
     <p class="lede">Spillernes skjermer følger fasen du velger her — de oppdateres i
     samme øyeblikk du bytter.</p>
+    ${
+      runbook
+        ? `<details class="editor">
+             <summary>${icon(I.locked, { lead: true })}Kjøreplan for kvelden — regi og rekvisitter (kun for deg)</summary>
+             <div class="card runbook"><p>${escMultiline(runbook)}</p></div>
+           </details>`
+        : ''
+    }
     ${steps}
     <details class="editor">
       <summary>${icon(I.briefing, { lead: true })}Åstedsrapporten (les høyt i fase 1)</summary>

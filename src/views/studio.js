@@ -259,6 +259,9 @@ function renderEditor() {
           <textarea name="intro" rows="5">${esc(mystery.intro)}</textarea>
           <label>Oppklaringen (leses høyt ved avsløringen — hold den hemmelig!)</label>
           <textarea name="resolution" rows="5">${esc(mystery.resolution)}</textarea>
+          <label>Kjøreplan (regi, rekvisitter og tidslinje — vises bare til verten)</label>
+          <textarea name="runbook" rows="10"
+            placeholder="F.eks: rekvisitter, hvordan offeret dør foran gjestene, når tippetimen åpner, hvilke polaroider som vises når …">${esc(mystery.runbook ?? '')}</textarea>
           <button>${icon(I.save, { lead: true })}Lagre historien</button>
         </form>
       </div>
@@ -375,6 +378,7 @@ function wireEditorEvents() {
       p_title: f.title.value,
       p_intro: f.intro.value,
       p_resolution: f.resolution.value,
+      p_runbook: f.runbook.value,
     })
   })
 
