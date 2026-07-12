@@ -13,8 +13,15 @@ Tre sider:
 - **`/studio.html`** — verkstedet: lag egne mysterier med egne mistenkte,
   egen morder og egne bevis (alt lagres i Supabase)
 
-Det innebygde mysteriet er «Ljåmordet på grillfesten». Norsk spillinnhold,
-engelsk kode. Se `CLAUDE.md` for arbeidsreglene.
+Innebygde mysterier: «Ljåmordet på grillfesten», «Giftmordet på julebordet»
+og «Drapet på HR-sjefen». Norsk spillinnhold, engelsk kode. Se `CLAUDE.md`
+for arbeidsreglene.
+
+**Det fysiske er halve moroa:** hvert mysterium har en kjøreplan i
+[`runbooks/`](runbooks/) med rekvisittliste, regi for dødsscenen (offeret gjør
+entré og dør foran gjestene!), instruks for å iscenesette og printe fysiske
+polaroider, og en tidslinje der festen fortsetter mens mysteriet pågår.
+Appen er vertens saksmappe og gjestenes rollekort — kjøreplanen er regien.
 
 ## Teknologi
 
