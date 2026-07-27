@@ -2607,3 +2607,29 @@ grant execute on function get_saboteur_ballot_targets(uuid, uuid) to anon, authe
 grant execute on function cast_saboteur_ballot(uuid, uuid, uuid, uuid) to anon, authenticated;
 grant execute on function claim_saboteur_objective(uuid, uuid, uuid) to anon, authenticated;
 grant execute on function claim_saboteur_task(uuid, uuid, uuid) to anon, authenticated;
+
+-- Player-side discovery: "is there a Skjult agenda for MY party, and what's
+-- its id" — see supabase/migrations/00010_saboteur_discovery.sql. Reveals
+-- only existence, never role/participant/objective/vote data.
+create or replace function get_my_saboteur_game_id(p_player_token uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_player players;
+  v_sabgame saboteur_games;
+begin
+  if not _saboteur_enabled() then
+    raise exception 'Skjult agenda er ikke slått på';
+  end if;
+  v_player := _player(p_player_token);
+
+  select * into v_sabgame from saboteur_games
+  where game_id = v_player.game_id and status <> 'archived'
+  order by created_at desc
+  limit 1;
+
+  return json_build_object('saboteur_game_id', v_sabgame.id);
+end $$;
+
+grant execute on function get_my_saboteur_game_id(uuid) to anon, authenticated;
