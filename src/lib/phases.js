@@ -23,8 +23,8 @@ export const PHASES = [
   {
     id: 'ledetraader',
     label: 'Ledetrådene',
-    player: 'Verten legger fram bevis fra åstedet. Følg med på polaroidene som dukker opp nedenfor.',
-    script: 'Samle alle. Avslør polaroidene ett og ett under «Polaroider», og les hvert av dem høyt med passe dramatikk. Slipp gjerne løs litt diskusjon mellom hvert bevis.',
+    player: 'Verten legger fram bevis fra åstedet. Følg med på bevisene som dukker opp nedenfor.',
+    script: 'Samle alle. Avslør bevisene ett og ett under «Bevis», og les hvert av dem høyt med passe dramatikk. Slipp gjerne løs litt diskusjon mellom hvert bevis.',
   },
   {
     id: 'forhor',

@@ -261,7 +261,7 @@ function renderEditor() {
           <textarea name="resolution" rows="5">${esc(mystery.resolution)}</textarea>
           <label>Kjøreplan (regi, rekvisitter og tidslinje — vises bare til verten)</label>
           <textarea name="runbook" rows="10"
-            placeholder="F.eks: rekvisitter, hvordan offeret dør foran gjestene, når tippetimen åpner, hvilke polaroider som vises når …">${esc(mystery.runbook ?? '')}</textarea>
+            placeholder="F.eks: rekvisitter, hvordan offeret dør foran gjestene, når tippetimen åpner, hvilke bevis som vises når …">${esc(mystery.runbook ?? '')}</textarea>
           <button>${icon(I.save, { lead: true })}Lagre historien</button>
         </form>
       </div>
@@ -282,7 +282,7 @@ function renderEditor() {
         </form>
       </div>
 
-      <h2>${icon(I.evidence, { lead: true })}Polaroider — bevisene (${polaroids.length})</h2>
+      <h2>${icon(I.evidence, { lead: true })}Bevis (${polaroids.length})</h2>
       ${polaroids.map(renderPolaroidEditor).join('')}
 
       <h3>${icon(I.add, { lead: true })}Nytt bevis</h3>
