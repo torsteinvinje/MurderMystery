@@ -4,7 +4,9 @@ Standing instructions for this project. Read at the start of every session. The 
 
 ## What this is
 
-**MurderMystery** — a web app for hosting Norwegian murder-mystery party games. A host runs a live in-person party; the app is the digital game master. Three experiences: a **host** view (full control, sees the solution), a **player** view (each guest joins with a code, gets a role card, marks suspicion), and a **studio** view (author your own mysteries: suspects, murderer, evidence). Mysteries are templates in a catalog; each game copies its mystery's content at creation. The built-in mystery is "Ljåmordet på grillfesten". Game content is in **Norwegian** and stays Norwegian — only code, comments, and scaffolding are in English.
+**MurderMystery** — a web app for hosting Norwegian murder-mystery party games. A host runs a live in-person party; the app is the digital game master. Three experiences: a **host** view (full control, sees the solution), a **player** view (each guest joins with a code, gets a role card, marks suspicion), and a **studio** view (author your own mysteries: suspects, murderer, evidence). Mysteries are templates in a catalog; each game copies its mystery's content at creation. Built-in mysteries include "Ljåmordet på grillfesten", "Giftmordet på julebordet", and "Drapet på HR-sjefen" (each has a physical staging runbook in `runbooks/`). Game content is in **Norwegian** and stays Norwegian — only code, comments, and scaffolding are in English.
+
+There is also an opt-in **Skjult agenda** mode (hidden-identity social deduction, played inside an existing party): OFF by default everywhere, gated both client-side (`VITE_SABOTEUR_GAME_ENABLED`) and server-side (`app_feature_flags.SABOTEUR_GAME_ENABLED` — the real boundary; every one of its RPCs checks this first). See the README's "Skjult agenda" section before touching this code.
 
 ## Tech stack (do not swap without asking)
 
@@ -33,6 +35,7 @@ Standing instructions for this project. Read at the start of every session. The 
 - **All writes and all sensitive reads go through the RPCs**, called as `supabase.rpc('name', { params })`. Do not write to tables directly from the client.
 - Key RPCs: `create_game`, `join_game`, `get_my_player`, `host_list_players`, `host_get_suspects`, `host_set_phase`, `host_set_status`, `host_assign_suspect`, `host_auto_assign`, `host_reveal_polaroid`, `set_suspicion`, `get_my_suspicions`, `get_reveal`, and the writeback ones `host_update_suspect`, `host_upsert_polaroid`, `host_delete_polaroid`.
 - Mystery catalog/authoring RPCs: `list_mysteries` (public, never leaks solutions), `create_mystery`, and the `owner_*` family (`owner_get_mystery`, `owner_update_mystery`, `owner_upsert_suspect`, `owner_set_killer`, `owner_delete_suspect`, `owner_upsert_polaroid`, `owner_delete_polaroid`, `owner_delete_mystery`) — all validated by a secret `owner_token`.
+- Skjult agenda RPCs (opt-in, all flag-gated first): `host_create_saboteur_game`, `host_set_participants`, `host_set_saboteur_status`, `host_upsert_objective`/`host_decide_objective_claim`, `host_upsert_task`/`host_decide_task_claim`, `host_open_voting_round`/`host_close_voting_round`/`host_reveal_voting_round`, `host_get_saboteur_game`, `host_get_saboteur_audit`, `host_end_saboteur_game`, `host_archive_saboteur_game`, plus player-facing `get_my_saboteur_game_id`, `get_my_saboteur_brief`, `get_my_saboteur_vote_status`, `get_saboteur_ballot_targets`, `cast_saboteur_ballot`, `claim_saboteur_objective`/`claim_saboteur_task`. Same token-validated, per-viewer-payload pattern as everything else — see `supabase/migrations/00009_saboteur_game.sql` for the full security model.
 - Editable content must persist to Supabase, never live only in browser state. Every host/author edit goes through a writeback RPC and (via Realtime, for games) reaches players' screens.
 - Host identity = secret `host_token` (localStorage). Player identity = secret `player_token` (localStorage). Mystery author identity = secret `owner_token` (localStorage list). RPCs validate these; the client just passes them.
 
@@ -42,6 +45,7 @@ Standing instructions for this project. Read at the start of every session. The 
 - One Supabase client module reads env vars; import it everywhere else.
 - Prefer clear, commented code over cleverness — the maintainer is learning this stack.
 - Guests are on phones at a party: mobile-first, with clear loading and error states.
+- No project-wide test runner/linter/formatter. Vitest (`npm test`) exists but is scoped only to the Skjult agenda feature (`src/lib/flags.test.js`, `tests/`) — don't assume it covers anything else.
 
 ## How to work with me
 

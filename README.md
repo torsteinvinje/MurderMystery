@@ -87,6 +87,43 @@ bekreftelses-/gjenopprettingstokens håndteres av Supabase — aldri av appen.
 4. **Email Templates** (norsk): «Bekreft e-postadressen din», «Tilbakestill
    passordet ditt», og «Bekreft endring av e-postadresse».
 
+## Skjult agenda — valgfri modus (AV som standard)
+
+En egen, opt-in sosial-deduksjon-modus inni en eksisterende fest: noen gjester
+blir hemmelige **Sabotører** med egne mål, resten er **Lojale** med egne
+oppgaver og hint. Kjøres av vertskontrollen i en «Skjult agenda»-fane, og
+gjestene ser sin egen rolle i en egen boks på spillskjermen — helt uavhengig
+av mordmysteriets faser. Bygget oppå de samme primitivene som resten av appen
+(samme `host_token`/`player_token`), ingen ny innloggingsmodell.
+
+**Av som standard, overalt, på to nivåer:**
+
+1. Klient: `VITE_SABOTEUR_GAME_ENABLED=true` i `.env` (bygges inn — se
+   `.env.example`). Uten denne vises ingen fane/boks i det hele tatt.
+2. Database (den reelle sperren): tabellen `app_feature_flags`, rad
+   `SABOTEUR_GAME_ENABLED`. Hver eneste RPC for denne modusen sjekker denne
+   raden som sin aller første setning, uavhengig av klientflagget — et gjettet
+   API-kall kan altså aldri slå på eller utnytte funksjonen.
+
+**For å prøve den lokalt:** kjør migrasjonene `00009_saboteur_game.sql` og
+`00010_saboteur_discovery.sql` (eller hele `supabase-schema.sql`), sett
+`update app_feature_flags set enabled = true where key = 'SABOTEUR_GAME_ENABLED';`
+i SQL Editor, og sett `VITE_SABOTEUR_GAME_ENABLED=true` lokalt.
+
+**For å skru den helt av igjen:** sett `enabled = false` på raden over — virker
+øyeblikkelig, ingen redeploy nødvendig. For å fjerne den fra databasen helt,
+kjør ned-migrasjonene (`00009_saboteur_game_down.sql` +
+`00010_saboteur_discovery_down.sql`); de rører aldri
+games/players/suspects/polaroids/mysteries/profiles.
+
+**Tester:** `npm test` (Vitest, lagt til kun for denne modusen). To
+testfiler er alltid kjørbare uten database (flagg-standardverdi +
+statiske sikkerhetssjekker mot selve migrasjonsfila); en tredje
+(`tests/saboteur.integration.test.js`) kjører ekte RPC-kall mot en
+Supabase-testdatabase og hopper over seg selv med synlig begrunnelse hvis
+`SUPABASE_TEST_URL`/`SUPABASE_TEST_ANON_KEY` ikke er satt — pek den **aldri**
+mot produksjonsdatabasen.
+
 ## Deploy
 
 Produksjon kommer **kun** fra `main`: commit → push → Netlify bygger og

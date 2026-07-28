@@ -65,6 +65,16 @@ export const I = {
   tabSuspects: 'identification-card',
   tabPolaroids: 'camera',
   tabReveal: 'gavel',
+  tabSaboteur: 'mask-happy',
+
+  // Skjult agenda (hidden-identity mode)
+  saboteur: 'mask-happy',
+  loyal: 'shield-check',
+  objective: 'target',
+  task: 'check-square-offset',
+  hint: 'lightbulb',
+  ballot: 'check-square',
+  claim: 'hand-pointing',
 
   // status / messages
   ok: 'check-circle',
