@@ -12,6 +12,9 @@ import { hero } from '../lib/hero.js'
 import heroJoin from '../assets/mood/study.webp'
 import { PHASES, phaseIndex, phaseLabel } from '../lib/phases.js'
 import { loadPlayer, savePlayer, clearPlayer } from '../lib/tokens.js'
+// Only used to decide whether to signpost the separate Skjult agenda game.
+// No shared state or logic between the two games — just a link.
+import { SABOTEUR_GAME_ENABLED } from '../lib/flags.js'
 
 const app = document.querySelector('#app')
 
@@ -164,6 +167,17 @@ function renderJoin() {
       })}
 
       ${state.error ? `<p class="error">${icon(I.error, { lead: true })}${esc(state.error)}</p>` : ''}
+      ${
+        // A guest handed a Skjult agenda code will naturally try it here, on
+        // the main page, and get "fant ingen fest" — the codes look identical
+        // but belong to two separate games. Point them to the right door at
+        // exactly the moment it fails. Just a link: the two games stay
+        // completely independent.
+        state.error && SABOTEUR_GAME_ENABLED
+          ? `<p class="hint">Skulle du spille <strong>Skjult agenda</strong>? Det er et eget spill —
+             <a href="/skjult.html">bli med her i stedet →</a></p>`
+          : ''
+      }
 
       <form id="join-form">
         <label for="join-code">${icon(I.code, { lead: true })}Festkode</label>
@@ -176,6 +190,7 @@ function renderJoin() {
 
       <footer class="app-footer">
         <span>Er du verten? <a href="/host.html">${icon(I.host, { lead: true })}Til vertskontrollen</a></span>
+        ${SABOTEUR_GAME_ENABLED ? `<a href="/skjult.html">${icon(I.saboteur, { lead: true })}Skjult agenda</a>` : ''}
       </footer>
     </div>`
 
