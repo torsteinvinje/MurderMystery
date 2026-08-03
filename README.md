@@ -5,13 +5,17 @@ fest, og la gjestene bli med fra sin egen telefon med en firetegns festkode —
 med rollekort, hemmeligheter, bevis og avstemning. Verten styrer kvelden og er
 den eneste som vet hvem morderen er, helt til avsløringen.
 
-Tre sider:
+Sider:
 
 - **`/`** — gjestene: bli med, få rolle, marker mistanke, se avsløringen
 - **`/host.html`** — vertskontrollen: velg mysterium, festkode, faser, roller,
   bevis, redigering og den røde knappen
 - **`/studio.html`** — verkstedet: lag egne mysterier med egne mistenkte,
   egen morder og egne bevis (alt lagres i Supabase)
+- **`/konto.html`** — vertskonto: registrering, innlogging, glemt passord
+- **`/skjult.html`** — «Skjult agenda»: et **eget selskapsspill** med hemmelige
+  roller, helt uavhengig av mordmysteriene (valgfritt, av som standard —
+  se eget avsnitt lenger nede)
 
 Innebygde mysterier: «Ljåmordet på grillfesten», «Giftmordet på julebordet»
 og «Drapet på HR-sjefen». Norsk spillinnhold, engelsk kode. Se `CLAUDE.md`
@@ -87,38 +91,51 @@ bekreftelses-/gjenopprettingstokens håndteres av Supabase — aldri av appen.
 4. **Email Templates** (norsk): «Bekreft e-postadressen din», «Tilbakestill
    passordet ditt», og «Bekreft endring av e-postadresse».
 
-## Skjult agenda — valgfri modus (AV som standard)
+## Skjult agenda — eget selskapsspill (AV som standard)
 
-En egen, opt-in sosial-deduksjon-modus inni en eksisterende fest: noen gjester
-blir hemmelige **Sabotører** med egne mål, resten er **Lojale** med egne
-oppgaver og hint. Kjøres av vertskontrollen i en «Skjult agenda»-fane, og
-gjestene ser sin egen rolle i en egen boks på spillskjermen — helt uavhengig
-av mordmysteriets faser. Bygget oppå de samme primitivene som resten av appen
-(samme `host_token`/`player_token`), ingen ny innloggingsmodell.
+Et **frittstående spill**, ikke en del av mordmysteriet: noen deltakere er
+hemmelige **Sabotører** med egne mål, resten er **Lojale** med egne oppgaver
+og hint. Verten godkjenner oppdrag og styrer avstemningen; ingen blir kastet
+ut automatisk — stemmene er bevis, verten bestemmer hva som skjer videre.
+
+Spillet har sin **egen kode, egen vert og egne spillere**, og bor på
+**`/skjult.html`**. Mordmysteriet er ikke involvert i det hele tatt: ingen
+fest, ingen mystery, ingen rollekort derfra. Én side dekker alle tre roller —
+den viser «start spill / bli med», vertskontroll eller spillerkortet, avhengig
+av hva som ligger lagret på enheten.
+
+**Slik spilles det:** en person åpner `/skjult.html`, trykker «Opprett spill»
+og får en firetegns kode. De andre går til samme side, taster koden og navnet
+sitt. Verten deler ut roller (manuelt eller tilfeldig), starter spillet, lager
+mål til Sabotørene og oppgaver til de Lojale, godkjenner det folk melder inn,
+åpner avstemning når det passer — og avslutter spillet, som er det eneste som
+avslører rollene.
 
 **Av som standard, overalt, på to nivåer:**
 
 1. Klient: `VITE_SABOTEUR_GAME_ENABLED=true` i `.env` (bygges inn — se
-   `.env.example`). Uten denne vises ingen fane/boks i det hele tatt.
+   `.env.example`). Uten den vises ingen meny-lenke, og `/skjult.html` viser
+   bare en kort «ikke slått på»-melding.
 2. Database (den reelle sperren): tabellen `app_feature_flags`, rad
-   `SABOTEUR_GAME_ENABLED`. Hver eneste RPC for denne modusen sjekker denne
-   raden som sin aller første setning, uavhengig av klientflagget — et gjettet
-   API-kall kan altså aldri slå på eller utnytte funksjonen.
+   `SABOTEUR_GAME_ENABLED`. Hver eneste RPC sjekker denne raden som sin aller
+   første setning, uavhengig av klientflagget — et gjettet API-kall kan altså
+   aldri slå på eller utnytte funksjonen.
 
-**For å prøve den lokalt:** kjør migrasjonene `00009_saboteur_game.sql` og
-`00010_saboteur_discovery.sql` (eller hele `supabase-schema.sql`), sett
+**For å prøve det:** kjør migrasjonen `00011_saboteur_standalone.sql` (eller
+hele `supabase-schema.sql`), så
 `update app_feature_flags set enabled = true where key = 'SABOTEUR_GAME_ENABLED';`
-i SQL Editor, og sett `VITE_SABOTEUR_GAME_ENABLED=true` lokalt.
+i SQL Editor, og sett `VITE_SABOTEUR_GAME_ENABLED=true` (lokalt i `.env`, i
+produksjon som miljøvariabel i Netlify + ny deploy, siden klientflagget bakes
+inn ved bygging).
 
-**For å skru den helt av igjen:** sett `enabled = false` på raden over — virker
-øyeblikkelig, ingen redeploy nødvendig. For å fjerne den fra databasen helt,
-kjør ned-migrasjonene (`00009_saboteur_game_down.sql` +
-`00010_saboteur_discovery_down.sql`); de rører aldri
-games/players/suspects/polaroids/mysteries/profiles.
+**For å skru det av igjen:** sett `enabled = false` på raden over — virker
+øyeblikkelig, ingen redeploy nødvendig, og alle data beholdes. For å fjerne
+det fra databasen helt: `00011_saboteur_standalone_down.sql`. Verken den eller
+opp-migrasjonen rører noen gang games/players/suspects/polaroids/mysteries/profiles.
 
-**Tester:** `npm test` (Vitest, lagt til kun for denne modusen). To
-testfiler er alltid kjørbare uten database (flagg-standardverdi +
-statiske sikkerhetssjekker mot selve migrasjonsfila); en tredje
+**Tester:** `npm test` (Vitest, lagt til kun for dette spillet). To testfiler
+er alltid kjørbare uten database (flagg-standardverdi + statiske sikkerhets-
+og «er den frittstående?»-sjekker mot selve migrasjonsfila); en tredje
 (`tests/saboteur.integration.test.js`) kjører ekte RPC-kall mot en
 Supabase-testdatabase og hopper over seg selv med synlig begrunnelse hvis
 `SUPABASE_TEST_URL`/`SUPABASE_TEST_ANON_KEY` ikke er satt — pek den **aldri**
