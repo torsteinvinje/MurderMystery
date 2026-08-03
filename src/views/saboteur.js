@@ -575,22 +575,56 @@ function renderHostRegi() {
 
 // Free-text messages the host pushes to everyone, regardless of role. Distinct
 // from hints, which belong to a task and only reach selected Lojale.
+//
+// Full lifecycle: write a draft, edit it as often as you like, publish when
+// you're ready, retract it again, delete it. Drafts are host-only — the
+// database filters them out of every player payload, so a half-written
+// message can't leak before it's sent.
 function renderHostAnnouncements() {
   const list = state.game.announcements || []
-  const rows = list
-    .map((a) => `
-      <div class="card">
-        <p class="kicker">${icon(I.hint, { lead: true })}${esc(new Date(a.created_at).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }))}</p>
-        <p>${escMultiline(a.body)}</p>
+  const drafts = list.filter((a) => !a.published)
+  const published = list.filter((a) => a.published)
+
+  const card = (a) => `
+    <div class="card">
+      <div class="title-row" style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+        <span class="badge${a.published ? ' ok' : ''}">
+          ${a.published
+            ? `${icon(I.show, { lead: true })}Publisert ${esc(formatTime(a.published_at ?? a.created_at))}`
+            : `${icon(I.edit, { lead: true })}Utkast`}
+        </span>
+      </div>
+      <p>${escMultiline(a.body)}</p>
+      <div class="btn-row">
+        ${a.published
+          ? `<button class="btn-quiet" data-publish-announcement="${esc(a.id)}" data-published="true">${icon(I.hide, { lead: true })}Trekk tilbake</button>`
+          : `<button data-publish-announcement="${esc(a.id)}" data-published="false">${icon(I.show, { lead: true })}Publiser</button>`}
         <button class="btn-quiet" data-delete-announcement="${esc(a.id)}">${icon(I.del, { lead: true })}Slett</button>
-      </div>`)
-    .join('')
+      </div>
+      <details class="editor" data-panel="edit-announcement-${esc(a.id)}">
+        <summary>${icon(I.edit, { lead: true })}Rediger</summary>
+        <form data-hold data-edit-announcement="${esc(a.id)}">
+          <label>Beskjed
+            <textarea name="body" maxlength="500" required>${esc(a.body)}</textarea>
+          </label>
+          <p class="hint">${a.published
+            ? 'Endringen vises hos alle med én gang, siden beskjeden er publisert.'
+            : 'Utkastet er kun synlig for deg til du publiserer.'}</p>
+          <button>${icon(I.save, { lead: true })}Lagre endring</button>
+        </form>
+      </details>
+    </div>`
 
   return `
     <h2>${icon(I.hint, { lead: true })}Beskjeder til alle</h2>
-    <p class="lede">Går til alle deltakere uansett rolle — bruk det til felles hint,
-    regler eller kunngjøringer underveis.</p>
-    ${rows || '<p class="notice">Ingen beskjeder sendt ennå.</p>'}
+    <p class="lede">Går til alle deltakere uansett rolle — felles hint, regler eller
+    kunngjøringer. Skriv dem gjerne ferdig på forhånd som utkast, og publiser når
+    du vil ha dem ut.</p>
+
+    ${drafts.length > 0 ? `<h3>${icon(I.edit, { lead: true })}Utkast (kun du ser disse)</h3>${drafts.map(card).join('')}` : ''}
+    ${published.length > 0 ? `<h3>${icon(I.show, { lead: true })}Publisert</h3>${published.map(card).join('')}` : ''}
+    ${list.length === 0 ? '<p class="notice">Ingen beskjeder ennå.</p>' : ''}
+
     <details class="editor" data-panel="new-announcement">
       <summary>${icon(I.add, { lead: true })}Ny beskjed</summary>
       <form data-hold id="new-announcement-form">
@@ -598,9 +632,21 @@ function renderHostAnnouncements() {
           <textarea name="body" maxlength="500" required
             placeholder="F.eks. «Et av ryktene dere har hørt i kveld er plantet av en sabotør.»"></textarea>
         </label>
-        <button>${icon(I.add, { lead: true })}Send til alle</button>
+        <label style="display:flex; align-items:center; gap:8px; font-weight:400;">
+          <input type="checkbox" name="publish_now" style="width:auto;" checked />
+          Publiser med én gang
+        </label>
+        <button>${icon(I.add, { lead: true })}Lagre</button>
       </form>
     </details>`
+}
+
+function formatTime(iso) {
+  try {
+    return new Date(iso).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return ''
+  }
 }
 
 function renderHostParticipants(draft) {
@@ -968,10 +1014,45 @@ function wireEvents() {
   app.querySelectorAll('[data-phase]').forEach((btn) =>
     btn.addEventListener('click', () => hostAction('host_set_saboteur_phase', { p_phase: btn.dataset.phase }))
   )
-  bind('#new-announcement-form', 'submit', (e) => {
+  bind('#new-announcement-form', 'submit', async (e) => {
     e.preventDefault()
-    hostAction('host_publish_announcement', { p_body: e.target.elements.body.value }, 'Beskjed sendt')
+    const f = e.target.elements
+    const publishNow = f.publish_now.checked
+    state.error = ''
+    try {
+      const created = await rpc('host_upsert_announcement', {
+        p_host_token: hostToken(), p_body: f.body.value,
+      })
+      if (publishNow) {
+        await rpc('host_set_announcement_published', {
+          p_host_token: hostToken(), p_announcement_id: created.id, p_published: true,
+        })
+      }
+      await refreshHost()
+      showFlash(publishNow ? 'Beskjed publisert' : 'Utkast lagret')
+    } catch (err) {
+      state.error = err.message
+      render()
+    }
   })
+  app.querySelectorAll('[data-edit-announcement]').forEach((form) =>
+    form.addEventListener('submit', (e) => {
+      e.preventDefault()
+      hostAction('host_upsert_announcement', {
+        p_announcement_id: form.dataset.editAnnouncement,
+        p_body: e.target.elements.body.value,
+      }, 'Lagret')
+    })
+  )
+  app.querySelectorAll('[data-publish-announcement]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const isPublished = btn.dataset.published === 'true'
+      hostAction('host_set_announcement_published', {
+        p_announcement_id: btn.dataset.publishAnnouncement,
+        p_published: !isPublished,
+      }, isPublished ? 'Trukket tilbake' : 'Publisert')
+    })
+  )
   app.querySelectorAll('[data-delete-announcement]').forEach((btn) =>
     btn.addEventListener('click', () => {
       if (confirm('Slette denne beskjeden?')) {
