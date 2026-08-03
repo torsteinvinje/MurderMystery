@@ -7,6 +7,7 @@
 import { icon, I } from './icons.js'
 import { esc } from './util.js'
 import { currentAccount } from './auth.js'
+import { SABOTEUR_GAME_ENABLED } from './flags.js'
 
 // active: 'host' | 'studio' | 'player' — which page is current.
 // newFestInPage: when true, the CTA is an in-page button (host dashboard,
@@ -33,6 +34,7 @@ export function topNav({ active = '', newFestInPage = false } = {}) {
         ${link('/host.html', 'host', I.host, 'Vertskontroll')}
         ${link('/studio.html', 'studio', I.studio, 'Verkstedet')}
         ${link('/', 'player', I.guests, 'Til festen')}
+        ${SABOTEUR_GAME_ENABLED ? link('/skjult.html', 'skjult', I.saboteur, 'Skjult agenda') : ''}
         ${cta}
         <span id="nav-account" class="nav-account-slot">${link('/konto.html', 'konto', I.account, 'Konto')}</span>
       </div>

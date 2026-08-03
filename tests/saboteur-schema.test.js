@@ -1,10 +1,11 @@
-// Static/textual assertions against the ACTUAL shipped SQL files — not a
-// re-implementation of the schema and not a substitute for running it
+// Static/textual assertions against the ACTUAL shipped SQL — not a
+// re-implementation of the schema, and not a substitute for running it
 // against real Postgres (see saboteur.integration.test.js for that). These
-// catch the class of regression that matters most for a security-sensitive
-// migration: someone edits or adds a function later and forgets a
-// security-critical line (the flag check, a uniqueness constraint, a
-// revoked grant). Always executable — no database needed.
+// catch the regression that matters most for a security-sensitive migration:
+// someone edits or adds a function later and forgets a critical line (the
+// flag check, a uniqueness constraint, a revoked grant).
+//
+// Always executable — no database needed.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -13,13 +14,64 @@ import { dirname, join } from 'node:path'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (p) => readFileSync(join(root, p), 'utf8')
 
-const migration = read('supabase/migrations/00009_saboteur_game.sql')
-const migrationDown = read('supabase/migrations/00009_saboteur_game_down.sql')
-const discovery = read('supabase/migrations/00010_saboteur_discovery.sql')
-const discoveryDown = read('supabase/migrations/00010_saboteur_discovery_down.sql')
+const migration = read('supabase/migrations/00011_saboteur_standalone.sql')
+const migrationDown = read('supabase/migrations/00011_saboteur_standalone_down.sql')
 const schemaFile = read('supabase-schema.sql')
+const hostView = read('src/views/host.js')
+const playerView = read('src/views/player.js')
 
-describe('Skjult agenda migration — static security invariants', () => {
+describe('Skjult agenda is a STANDALONE game, not part of the murder mystery', () => {
+  it('saboteur_games has its own join code and host token', () => {
+    expect(migration).toMatch(/create table saboteur_games[\s\S]*?code\s+text not null unique/i)
+    expect(migration).toMatch(/create table saboteur_games[\s\S]*?host_token\s+uuid not null default gen_random_uuid\(\)/i)
+  })
+
+  it('saboteur_games no longer references the murder-mystery games table', () => {
+    const block = migration.match(/create table saboteur_games[\s\S]*?\n\);/i)[0]
+    expect(block).not.toMatch(/references games/i)
+  })
+
+  it('participants carry their own player_token and display_name', () => {
+    const block = migration.match(/create table saboteur_participants[\s\S]*?\n\);/i)[0]
+    expect(block).toMatch(/player_token\s+uuid not null unique/i)
+    expect(block).toMatch(/display_name\s+text not null/i)
+    expect(block).not.toMatch(/references players/i)
+  })
+
+  it('has standalone entry points (create + join by code)', () => {
+    expect(migration).toMatch(/create or replace function create_saboteur_game\(/i)
+    expect(migration).toMatch(/create or replace function join_saboteur_game\(p_code text, p_name text\)/i)
+  })
+
+  it('host RPCs take no game id — the host_token identifies the game', () => {
+    // This is what removes cross-game id tampering entirely: there is no id
+    // argument left to tamper with.
+    expect(migration).toMatch(/create or replace function host_get_saboteur_game\(p_host_token uuid\)/i)
+    expect(migration).toMatch(/create or replace function host_open_voting_round\(p_host_token uuid\)/i)
+    expect(migration).not.toMatch(/host_\w+\(p_host_token uuid, p_saboteur_game_id uuid/i)
+  })
+
+  it('player RPCs take no game id either', () => {
+    expect(migration).toMatch(/create or replace function get_my_saboteur_brief\(p_player_token uuid\)/i)
+    expect(migration).not.toMatch(/get_my_saboteur_brief\(p_player_token uuid, p_saboteur_game_id/i)
+  })
+
+  it('the murder-mystery views no longer contain the feature at all', () => {
+    for (const [name, src] of [['host.js', hostView], ['player.js', playerView]]) {
+      expect(src, `${name} should not reference saboteur`).not.toMatch(/saboteur/i)
+      expect(src, `${name} should not import the flag`).not.toMatch(/SABOTEUR_GAME_ENABLED/)
+    }
+  })
+
+  it('never drops or alters a murder-mystery table', () => {
+    for (const src of [migration, migrationDown]) {
+      expect(src).not.toMatch(/drop table (if exists )?(games|players|suspects|polaroids|mysteries|profiles)\b/i)
+      expect(src).not.toMatch(/alter table (games|players|suspects|polaroids|mysteries|profiles)\b/i)
+    }
+  })
+})
+
+describe('Skjult agenda migration — security invariants', () => {
   it('feature flag defaults to false', () => {
     expect(migration).toMatch(/values\s*\(\s*'SABOTEUR_GAME_ENABLED',\s*false\s*\)/i)
   })
@@ -31,8 +83,6 @@ describe('Skjult agenda migration — static security invariants', () => {
       'saboteur_points_ledger', 'saboteur_audit_log',
     ]
     for (const table of tables) {
-      // The migration column-aligns these with extra spaces (matching the
-      // rest of this schema's style), so whitespace must be flexible here.
       expect(migration, `${table} should enable RLS`).toMatch(
         new RegExp(`alter table ${table}\\s+enable row level security`, 'i')
       )
@@ -42,22 +92,18 @@ describe('Skjult agenda migration — static security invariants', () => {
 
   it('every public RPC checks the feature flag before doing anything else', () => {
     const rpcDefs = migration.match(
-      /^create or replace function (host_\w+|get_my_saboteur_\w+|get_saboteur_\w+|cast_saboteur_\w+|claim_saboteur_\w+)\(/gim
+      /^create or replace function (create_saboteur_game|join_saboteur_game|host_\w+|get_my_saboteur_\w+|get_saboteur_\w+|cast_saboteur_\w+|claim_saboteur_\w+)\(/gim
     ) || []
     const flagChecks = migration.match(/if not _saboteur_enabled\(\) then raise exception/g) || []
     expect(rpcDefs.length).toBeGreaterThan(0)
     expect(flagChecks.length).toBe(rpcDefs.length)
   })
 
-  it('the discovery RPC (00010) also checks the feature flag', () => {
-    expect(discovery).toMatch(/if not _saboteur_enabled\(\) then/)
-  })
-
   it('internal helpers have execute revoked from client roles', () => {
     const internals = [
       '_saboteur_enabled\\(\\)',
-      '_saboteur_game_for_host\\(uuid, uuid\\)',
-      '_saboteur_participant_for_player\\(uuid, uuid\\)',
+      '_saboteur_host\\(uuid\\)',
+      '_saboteur_me\\(uuid\\)',
       '_saboteur_audit\\(uuid, text, jsonb\\)',
       '_saboteur_apply_transition\\(uuid, text\\)',
     ]
@@ -68,13 +114,13 @@ describe('Skjult agenda migration — static security invariants', () => {
     }
   })
 
-  it('one ballot per voter per round is a DATABASE constraint, not just app logic', () => {
+  it('one ballot per voter per round is a DATABASE constraint', () => {
     expect(migration).toMatch(/unique\s*\(voting_round_id,\s*voter_participant_id\)/i)
   })
 
   it('objective point awards are idempotent (partial unique index)', () => {
     expect(migration).toMatch(
-      /create unique index if not exists saboteur_points_ledger_idempotent[\s\S]{0,200}on saboteur_points_ledger \(source_type, source_id\) where source_id is not null/i
+      /create unique index saboteur_points_ledger_idempotent[\s\S]{0,200}on saboteur_points_ledger \(source_type, source_id\) where source_id is not null/i
     )
   })
 
@@ -82,29 +128,31 @@ describe('Skjult agenda migration — static security invariants', () => {
     expect(migration).toMatch(/unique\s*\(task_id,\s*released_to_participant_id\)/i)
   })
 
-  it('at most one non-archived Skjult agenda per party', () => {
+  it('at most one open voting round per game', () => {
     expect(migration).toMatch(
-      /create unique index if not exists saboteur_games_one_active_per_game[\s\S]{0,200}on saboteur_games \(game_id\) where status <> 'archived'/i
+      /create unique index saboteur_voting_rounds_one_open[\s\S]{0,200}on saboteur_voting_rounds \(saboteur_game_id\) where status = 'open'/i
     )
   })
 
-  it('at most one open voting round per Skjult agenda', () => {
-    expect(migration).toMatch(
-      /create unique index if not exists saboteur_voting_rounds_one_open[\s\S]{0,200}on saboteur_voting_rounds \(saboteur_game_id\) where status = 'open'/i
-    )
-  })
-
-  it('cross-game tampering guard: both helpers re-verify ownership of the caller\'s own game_id', () => {
-    expect(migration).toMatch(/_saboteur_game_for_host[\s\S]*?where id = p_saboteur_game_id and game_id = v_game\.id/)
-    expect(migration).toMatch(/_saboteur_participant_for_player[\s\S]*?where id = p_saboteur_game_id and game_id = v_player\.game_id/)
-  })
-
-  it('"voting" is not a directly settable status (must go through the dedicated round RPCs)', () => {
+  it('"voting" is not a directly settable status', () => {
     expect(migration).toMatch(/if p_new_status = 'voting' then\s*\n\s*raise exception/)
   })
 
-  it('starting the game (draft -> active) requires both roles present', () => {
-    expect(migration).toMatch(/count\(distinct role\) from saboteur_participants[\s\S]{0,200}< 2 then\s*\n\s*raise exception/)
+  it('starting the game requires both a Sabotør and a Lojal', () => {
+    expect(migration).toMatch(/count\(distinct role\) from saboteur_participants[\s\S]{0,220}< 2 then\s*\n\s*raise exception/)
+  })
+
+  it('roles are locked once the game leaves draft', () => {
+    expect(migration).toMatch(/host_set_participant_role[\s\S]*?status <> 'draft'[\s\S]*?raise exception/i)
+    expect(migration).toMatch(/host_auto_assign_roles[\s\S]*?status <> 'draft'[\s\S]*?raise exception/i)
+  })
+
+  it('vote tallies are withheld until a round is BOTH closed and revealed', () => {
+    expect(migration).toMatch(/'tally', case when v_round\.status = 'revealed' then/)
+  })
+
+  it('roles are revealed to players only when the game has ended', () => {
+    expect(migration).toMatch(/'reveal', case when v_game\.status = 'ended' then/)
   })
 
   it('the down-migration drops exactly the functions the up-migration creates', () => {
@@ -119,10 +167,12 @@ describe('Skjult agenda migration — static security invariants', () => {
     expect(dropped).toEqual(created)
   })
 
-  it('the down-migration drops exactly the tables the up-migration creates (plus app_feature_flags)', () => {
+  it('the down-migration drops exactly the tables the up-migration creates', () => {
+    // The up-migration creates app_feature_flags with "if not exists" and the
+    // rest plainly; both forms must be matched.
     const created = new Set(
-      (migration.match(/^create table if not exists (\w+)/gim) || [])
-        .map((s) => s.replace(/^create table if not exists /i, ''))
+      (migration.match(/^create table (?:if not exists )?(\w+)/gim) || [])
+        .map((s) => s.replace(/^create table (?:if not exists )?/i, ''))
     )
     const dropped = new Set(
       (migrationDown.match(/^drop table if exists (\w+)/gim) || [])
@@ -131,19 +181,16 @@ describe('Skjult agenda migration — static security invariants', () => {
     expect(dropped).toEqual(created)
   })
 
-  it('00010\'s down-migration drops exactly its own function', () => {
-    expect(discoveryDown).toMatch(/^drop function if exists get_my_saboteur_game_id\(uuid\);$/m)
-  })
-
-  it('never drops any pre-existing table (games/players/suspects/polaroids/mysteries/profiles)', () => {
-    expect(migration).not.toMatch(/drop table (games|players|suspects|polaroids|mysteries|profiles)/i)
-    expect(migrationDown).not.toMatch(/drop table (games|players|suspects|polaroids|mysteries|profiles)\b/i)
-  })
-
-  it('canonical supabase-schema.sql was updated to match (contains the same flag + core tables)', () => {
+  it('canonical supabase-schema.sql matches the standalone model', () => {
     expect(schemaFile).toMatch(/SABOTEUR_GAME_ENABLED/)
-    expect(schemaFile).toMatch(/create table if not exists saboteur_ballots/i)
-    expect(schemaFile).toMatch(/create table if not exists saboteur_points_ledger/i)
-    expect(schemaFile).toMatch(/get_my_saboteur_game_id/)
+    expect(schemaFile).toMatch(/create or replace function create_saboteur_game\(/i)
+    expect(schemaFile).toMatch(/create or replace function join_saboteur_game\(/i)
+    // The old party-bound functions must no longer be CREATED. They may still
+    // appear in `drop function if exists` cleanup lines — that is deliberate,
+    // so re-running the canonical file upgrades a database that had the old
+    // shape installed.
+    expect(schemaFile).not.toMatch(/create or replace function get_my_saboteur_game_id/i)
+    expect(schemaFile).not.toMatch(/create or replace function host_list_eligible_participants/i)
+    expect(schemaFile).toMatch(/drop function if exists get_my_saboteur_game_id/i)
   })
 })
