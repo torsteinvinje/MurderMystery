@@ -200,6 +200,33 @@ function showFlash(text) {
 }
 
 // Wrapper for host actions: run, surface errors, refresh, optional toast.
+// Which database update introduced each RPC. When the code is deployed but
+// the migration hasn't been run in Supabase yet, PostgREST reports a bare
+// "Could not find the function ..." — useless to a host mid-party. Map it to
+// something actionable instead.
+const RPC_MIGRATION = {
+  host_upsert_announcement: '00015_announcement_drafts.sql',
+  host_set_announcement_published: '00015_announcement_drafts.sql',
+  host_delete_announcement: '00013_saboteur_pins_phases.sql',
+  host_publish_announcement: '00013_saboteur_pins_phases.sql',
+  host_set_saboteur_phase: '00013_saboteur_pins_phases.sql',
+  rejoin_saboteur_game: '00013_saboteur_pins_phases.sql',
+  owner_list_saboteur_games: '00012_saboteur_account.sql',
+  owner_claim_saboteur_game: '00012_saboteur_account.sql',
+}
+
+function friendlyError(err, rpcName) {
+  const msg = err?.message || 'Ukjent feil'
+  const missingFunction = /could not find the function|schema cache|does not exist/i.test(msg)
+  if (missingFunction) {
+    const file = RPC_MIGRATION[rpcName]
+    return file
+      ? `Databasen mangler en oppdatering: kjør «${file}» i Supabase (SQL Editor), og deretter «NOTIFY pgrst, 'reload schema';». Teknisk melding: ${msg}`
+      : `Databasen mangler en oppdatering for «${rpcName}». Kjør migrasjonene i supabase/migrations/ i Supabase. Teknisk melding: ${msg}`
+  }
+  return msg
+}
+
 async function hostAction(name, params = {}, flashText = '') {
   state.error = ''
   try {
@@ -208,7 +235,7 @@ async function hostAction(name, params = {}, flashText = '') {
     if (flashText) showFlash(flashText)
     else render()
   } catch (err) {
-    state.error = err.message
+    state.error = friendlyError(err, name)
     render()
   }
 }
@@ -221,7 +248,7 @@ async function playerAction(name, params = {}, flashText = '') {
     if (flashText) showFlash(flashText)
     else render()
   } catch (err) {
-    state.error = err.message
+    state.error = friendlyError(err, name)
     render()
   }
 }
@@ -1024,12 +1051,11 @@ function wireEvents() {
   bind('#new-announcement-form', 'submit', async (e) => {
     e.preventDefault()
     const f = e.target.elements
-    const publishNow = f.publish_now.checked
+    const publishNow = f.publish_now ? f.publish_now.checked : true
+    const body = f.body.value
     state.error = ''
     try {
-      const created = await rpc('host_upsert_announcement', {
-        p_host_token: hostToken(), p_body: f.body.value,
-      })
+      const created = await rpc('host_upsert_announcement', { p_host_token: hostToken(), p_body: body })
       if (publishNow) {
         await rpc('host_set_announcement_published', {
           p_host_token: hostToken(), p_announcement_id: created.id, p_published: true,
@@ -1038,7 +1064,23 @@ function wireEvents() {
       await refreshHost()
       showFlash(publishNow ? 'Beskjed publisert' : 'Utkast lagret')
     } catch (err) {
-      state.error = err.message
+      // If 00015 hasn't been run yet, the draft functions don't exist — but
+      // the older publish-immediately function from 00013 might. Fall back to
+      // it so the host can still get a message out mid-party; drafts simply
+      // aren't available until the migration is applied.
+      if (/could not find the function|schema cache|does not exist/i.test(err?.message || '')) {
+        try {
+          await rpc('host_publish_announcement', { p_host_token: hostToken(), p_body: body })
+          await refreshHost()
+          showFlash('Beskjed publisert')
+          return
+        } catch (fallbackErr) {
+          state.error = friendlyError(fallbackErr, 'host_upsert_announcement')
+          render()
+          return
+        }
+      }
+      state.error = friendlyError(err, 'host_upsert_announcement')
       render()
     }
   })
