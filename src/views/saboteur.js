@@ -18,6 +18,8 @@ import { icon, I } from '../lib/icons.js'
 import { hero } from '../lib/hero.js'
 import heroImg from '../assets/mood/parlor.webp'
 import { SABOTEUR_GAME_ENABLED } from '../lib/flags.js'
+import { topNav, wireTopNav } from '../lib/nav.js'
+import { getSession } from '../lib/auth.js'
 import {
   loadSaboteurHost, saveSaboteurHost, clearSaboteurHost,
   loadSaboteurPlayer, saveSaboteurPlayer, clearSaboteurPlayer,
@@ -35,10 +37,16 @@ const state = {
   voteStatus: null,
   ballotTargets: [],
   confirmEnd: false, // two-tap guard on ending the game
+
+  // Account integration: when the host is logged in, their games follow the
+  // account instead of only this device's localStorage.
+  loggedIn: false,
+  myGames: [], // owner_list_saboteur_games result
 }
 
 let flashTimer = null
 let pollTimer = null
+let pendingRender = false
 
 const hostToken = () => loadSaboteurHost()?.host_token ?? null
 const playerToken = () => loadSaboteurPlayer()?.player_token ?? null
@@ -51,8 +59,14 @@ async function init() {
     render()
     return
   }
+  await refreshAccount()
+
   if (hostToken()) {
     await refreshHost()
+    // Started a game before signing in? Attach it now, so it shows up under
+    // "Mine spill" from here on. Safe and idempotent: holding the host token
+    // already grants full control of that game.
+    await claimIfLoggedIn()
     state.screen = state.game ? 'host' : 'landing'
   } else if (playerToken()) {
     await refreshPlayer()
@@ -62,6 +76,49 @@ async function init() {
   }
   render()
   startPolling()
+}
+
+// If the host is signed in, load the games tied to their account so they can
+// resume one from any device — the whole point of the account integration.
+// Signed out, this is simply a no-op and everything works as before.
+async function refreshAccount() {
+  try {
+    state.loggedIn = Boolean(await getSession())
+  } catch {
+    state.loggedIn = false
+  }
+  if (!state.loggedIn) {
+    state.myGames = []
+    return
+  }
+  try {
+    state.myGames = await rpc('owner_list_saboteur_games')
+  } catch {
+    // Migration 00012 not applied yet, or flag off — degrade quietly to the
+    // device-only behaviour rather than blocking the page.
+    state.myGames = []
+  }
+}
+
+async function claimIfLoggedIn() {
+  if (!state.loggedIn || !state.game || !hostToken()) return
+  try {
+    await rpc('owner_claim_saboteur_game', { p_host_token: hostToken() })
+    state.myGames = await rpc('owner_list_saboteur_games')
+  } catch {
+    // Already owned by this account, migration 00012 missing, or owned by
+    // someone else — none of which should interrupt hosting.
+  }
+}
+
+// Resume a game from the account list: adopt its host token on this device.
+async function resumeGame(token) {
+  state.error = ''
+  saveSaboteurHost({ host_token: token })
+  clearSaboteurPlayer()
+  await refreshHost()
+  state.screen = state.game ? 'host' : 'landing'
+  render()
 }
 
 // The standalone game has no game_events/Realtime plumbing of its own, so it
@@ -159,6 +216,7 @@ async function onCreateGame(e) {
     })
     saveSaboteurHost({ host_token: created.host_token, saboteur_game_id: created.saboteur_game_id, code: created.code })
     await refreshHost()
+    await claimIfLoggedIn() // create_saboteur_game already stamps owner_id; this keeps "Mine spill" fresh
     state.screen = 'host'
   } catch (err) {
     state.error = err.message
@@ -212,6 +270,23 @@ const ITEM_STATUS_LABEL = {
 }
 
 function render() {
+  // The 5s poll must never yank the rug out from under the host while they're
+  // filling in a form: re-rendering replaces the DOM, which would close the
+  // open panel and discard whatever they'd typed. So while focus is inside a
+  // [data-hold] region we defer the redraw and run it once they leave.
+  const active = document.activeElement
+  if (active && app.contains(active) && active.closest('[data-hold]')) {
+    pendingRender = true
+    return
+  }
+  pendingRender = false
+
+  // Panels are collapsed <details>; remember which were open so a background
+  // refresh doesn't snap them shut mid-task.
+  const openPanels = new Set(
+    [...app.querySelectorAll('details[data-panel][open]')].map((d) => d.dataset.panel)
+  )
+
   let body
   if (state.screen === 'disabled') body = renderDisabled()
   else if (state.screen === 'loading') body = `<p class="notice">Laster …</p>`
@@ -219,12 +294,36 @@ function render() {
   else if (state.screen === 'host') body = renderHost()
   else body = renderPlayer()
 
-  app.innerHTML = `<div class="sheet">${body}</div>`
+  // Host-facing screens get the same top navigation as the rest of the app,
+  // so running a Skjult agenda feels like part of the product rather than a
+  // separate island. Guests (the player brief) don't get host navigation —
+  // same convention as the murder-mystery player view.
+  const withNav = state.screen === 'landing' || state.screen === 'host'
+  const nav = withNav ? topNav({ active: 'skjult', cta: false }) : ''
+
+  app.innerHTML = `<div class="sheet">${nav}${body}</div>`
+  if (withNav) wireTopNav(app)
+  app.querySelectorAll('details[data-panel]').forEach((d) => {
+    if (openPanels.has(d.dataset.panel)) d.open = true
+  })
+
   if (state.flash) {
     app.insertAdjacentHTML('beforeend', `<div class="flash">${icon(I.ok, { lead: true })}${esc(state.flash)}</div>`)
   }
   wireEvents()
 }
+
+// Run the redraw we suppressed once focus actually leaves the form.
+app.addEventListener('focusout', () => {
+  // Wait a tick so document.activeElement points at the NEXT focused element
+  // (clicking straight from a field to the submit button must not trigger it).
+  setTimeout(() => {
+    const active = document.activeElement
+    if (pendingRender && !(active && app.contains(active) && active.closest('[data-hold]'))) {
+      render()
+    }
+  }, 60)
+})
 
 function renderDisabled() {
   return `
@@ -241,6 +340,35 @@ function errorBlock() {
   return state.error ? `<p class="error">${icon(I.warn, { lead: true })}${esc(state.error)}</p>` : ''
 }
 
+// Games tied to the signed-in account. This is what makes the host's games
+// survive a cleared browser or a switch to another device.
+function renderMyGames() {
+  if (!state.loggedIn) {
+    return `
+      <p class="hint" style="margin-bottom:16px;">
+        ${icon(I.account, { lead: true })}<a href="/konto.html">Logg inn</a> for å ta vare på
+        spillene dine — da finner du dem igjen selv om du bytter enhet.
+      </p>`
+  }
+  if (state.myGames.length === 0) return ''
+
+  const rows = state.myGames
+    .map((g) => `
+      <div class="suspect-row">
+        <div class="who">
+          <strong>${esc(g.title)}</strong>
+          <div class="tagline">Kode ${esc(g.code)} · ${esc(STATUS_LABEL[g.status] ?? g.status)} · ${g.participant_count} deltaker(e)</div>
+        </div>
+        <button class="btn-quiet" data-resume="${esc(g.host_token)}">${icon(I.play, { lead: true })}Fortsett</button>
+      </div>`)
+    .join('')
+
+  return `
+    <h2>${icon(I.host, { lead: true })}Mine spill</h2>
+    <p class="lede">Spill du er vert for. De følger kontoen din, ikke enheten.</p>
+    ${rows}`
+}
+
 function renderLanding() {
   return `
     ${hero({
@@ -250,11 +378,12 @@ function renderLanding() {
       lede: 'Noen av dere er hemmelige Sabotører med egne mål. Resten er Lojale. Klarer dere å avsløre hvem?',
     })}
     ${errorBlock()}
+    ${renderMyGames()}
 
     <div class="card">
       <h2 style="margin-top:0;">${icon(I.host, { lead: true })}Start et spill</h2>
       <p class="lede">Du blir vert: du deler ut roller, godkjenner oppdrag og styrer avstemningen.</p>
-      <form id="create-form">
+      <form data-hold id="create-form">
         <label for="c-title">Navn på spillet (valgfritt)</label>
         <input id="c-title" name="title" maxlength="80" placeholder="F.eks. «Fredagsvorspiel»" />
         <label style="display:flex; align-items:center; gap:8px; font-weight:400;">
@@ -267,7 +396,7 @@ function renderLanding() {
 
     <div class="card">
       <h2 style="margin-top:0;">${icon(I.join, { lead: true })}Bli med</h2>
-      <form id="join-form">
+      <form data-hold id="join-form">
         <label for="j-code">Spillkode</label>
         <input id="j-code" name="code" maxlength="4" autocapitalize="characters"
                autocomplete="off" spellcheck="false" required placeholder="F.eks. KX7M" />
@@ -333,7 +462,7 @@ function renderHost() {
     ${renderHostTasks()}
     ${renderHostVoting()}
 
-    <details class="editor" id="audit-details">
+    <details class="editor" id="audit-details" data-panel="audit">
       <summary>${icon(I.locked, { lead: true })}Hendelseslogg (kun for deg)</summary>
       <div id="audit-container"><p class="notice">Åpne for å laste …</p></div>
     </details>
@@ -418,9 +547,9 @@ function renderHostObjectives() {
     <h2>${icon(I.objective, { lead: true })}Mål til Sabotørene</h2>
     ${cards || '<p class="notice">Ingen mål lagt til ennå.</p>'}
     ${saboteurs.length > 0 ? `
-      <details class="editor">
+      <details class="editor" data-panel="new-objective">
         <summary>${icon(I.add, { lead: true })}Nytt mål</summary>
-        <form id="new-objective-form">
+        <form data-hold id="new-objective-form">
           <label>Sabotør
             <select name="participant_id">${saboteurs.map((p) => `<option value="${esc(p.id)}">${esc(p.display_name)}</option>`).join('')}</select>
           </label>
@@ -463,9 +592,9 @@ function renderHostTasks() {
     <h2>${icon(I.task, { lead: true })}Oppgaver til de Lojale</h2>
     ${cards || '<p class="notice">Ingen oppgaver lagt til ennå.</p>'}
     ${loyals.length > 0 ? `
-      <details class="editor">
+      <details class="editor" data-panel="new-task">
         <summary>${icon(I.add, { lead: true })}Ny oppgave</summary>
-        <form id="new-task-form">
+        <form data-hold id="new-task-form">
           <label>Lojal
             <select name="participant_id">${loyals.map((p) => `<option value="${esc(p.id)}">${esc(p.display_name)}</option>`).join('')}</select>
           </label>
@@ -593,7 +722,7 @@ function renderPlayer() {
       parts.push(`
         <div class="card">
           <p class="kicker">${icon(I.ballot, { lead: true })}Avstemningen er åpen</p>
-          <form id="vote-form">
+          <form data-hold id="vote-form">
             <label for="vote-target">Hvem mistenker du?</label>
             <select id="vote-target" name="target">
               ${state.ballotTargets.map((t) => `<option value="${esc(t.participant_id)}">${esc(t.display_name)}</option>`).join('')}
@@ -656,6 +785,9 @@ function wireEvents() {
 
   bind('#create-form', 'submit', onCreateGame)
   bind('#join-form', 'submit', onJoinGame)
+  app.querySelectorAll('[data-resume]').forEach((btn) =>
+    btn.addEventListener('click', () => resumeGame(btn.dataset.resume))
+  )
 
   const leave = app.querySelector('#leave-link')
   if (leave) leave.addEventListener('click', (e) => { e.preventDefault(); leaveGame() })

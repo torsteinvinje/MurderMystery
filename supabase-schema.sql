@@ -2774,3 +2774,64 @@ grant execute on function get_saboteur_ballot_targets(uuid) to anon, authenticat
 grant execute on function cast_saboteur_ballot(uuid, uuid, uuid) to anon, authenticated;
 grant execute on function claim_saboteur_objective(uuid, uuid) to anon, authenticated;
 grant execute on function claim_saboteur_task(uuid, uuid) to anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Skjult agenda + vertskonto: la en innlogget vert liste og gjenoppta sine
+-- egne spill (se supabase/migrations/00012_saboteur_account.sql). Uten dette
+-- lever vertsnøkkelen kun i localStorage, og spillet er tapt om enheten
+-- tømmes. Begge krever innlogging og returnerer kun kallerens egne spill.
+-- ----------------------------------------------------------------------------
+
+create or replace function owner_list_saboteur_games()
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  if v_uid is null then
+    raise exception 'Ikke innlogget';
+  end if;
+
+  return (
+    select coalesce(json_agg(json_build_object(
+      'saboteur_game_id', g.id,
+      'code', g.code,
+      'title', g.title,
+      'status', g.status,
+      'host_token', g.host_token,
+      'participant_count', (select count(*) from saboteur_participants sp where sp.saboteur_game_id = g.id),
+      'created_at', g.created_at
+    ) order by g.created_at desc), '[]'::json)
+    from saboteur_games g
+    where g.owner_id = v_uid and g.status <> 'archived'
+  );
+end $$;
+
+create or replace function owner_claim_saboteur_game(p_host_token uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_uid  uuid := auth.uid();
+  v_game saboteur_games;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  if v_uid is null then
+    raise exception 'Ikke innlogget';
+  end if;
+
+  v_game := _saboteur_host(p_host_token);
+
+  if v_game.owner_id is not null and v_game.owner_id <> v_uid then
+    raise exception 'Spillet tilhører allerede en annen konto';
+  end if;
+
+  update saboteur_games set owner_id = v_uid, updated_at = now() where id = v_game.id;
+  perform _saboteur_audit(v_game.id, 'claimed_by_account', '{}'::jsonb);
+  return json_build_object('ok', true, 'saboteur_game_id', v_game.id);
+end $$;
+
+grant execute on function owner_list_saboteur_games() to authenticated;
+grant execute on function owner_claim_saboteur_game(uuid) to authenticated;
