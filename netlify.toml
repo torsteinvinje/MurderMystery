@@ -8,6 +8,14 @@
 [build.environment]
   NODE_VERSION = "22"
 
+# The Skjult agenda page moved from /skjult.html to /skjult-agenda.html.
+# Anyone who already shared the old link (or printed a QR code) keeps working.
+[[redirects]]
+  from = "/skjult.html"
+  to = "/skjult-agenda.html"
+  status = 301
+  force = true
+
 # Baseline secure headers. These are safe for the current app; a full
 # Content-Security-Policy is deferred to the auth phase, where it must be
 # tested against the live Supabase REST + Realtime (wss) connections.

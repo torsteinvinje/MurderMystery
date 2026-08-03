@@ -11,7 +11,7 @@
 //     message, so neither confirms whether an address is registered.
 //   - Submit buttons disable while a request is in flight (no double submits).
 import '../styles/main.css'
-import { rpc } from '../lib/supabase.js'
+import { rpc, setRememberMe, getRememberMe } from '../lib/supabase.js'
 import { esc } from '../lib/util.js'
 import { icon, I } from '../lib/icons.js'
 import { topNav, wireTopNav } from '../lib/nav.js'
@@ -142,6 +142,10 @@ async function onLogin(e) {
   const password = f.password.value
   if (!validEmail(email)) return fail('Skriv inn en gyldig e-postadresse.')
   if (!password) return fail('Skriv inn passordet ditt.')
+
+  // Must be set BEFORE signing in, so the new session is written to the
+  // storage the user actually chose.
+  setRememberMe(f.remember ? f.remember.checked : true)
 
   state.email = email
   await run(async () => {
@@ -318,6 +322,11 @@ function viewLogin() {
         <label for="login-password">Passord</label>
         <input id="login-password" name="password" type="password"
                autocomplete="current-password" required />
+        <label style="display:flex; align-items:center; gap:8px; font-weight:400;">
+          <input type="checkbox" name="remember" style="width:auto;" ${getRememberMe() ? 'checked' : ''} />
+          Hold meg innlogget på denne enheten
+        </label>
+        <p class="hint">Slå av hvis du er på en delt eller lånt enhet — da blir du logget ut når fanen lukkes.</p>
         <button ${state.busy ? 'disabled' : ''}>${submitLabel('Logger inn …', 'Logg inn', I.login)}</button>
       </form>
       <div class="auth-links">

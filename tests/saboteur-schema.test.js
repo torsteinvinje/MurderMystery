@@ -18,6 +18,9 @@ const migration = read('supabase/migrations/00011_saboteur_standalone.sql')
 const migrationDown = read('supabase/migrations/00011_saboteur_standalone_down.sql')
 const accountMigration = read('supabase/migrations/00012_saboteur_account.sql')
 const accountMigrationDown = read('supabase/migrations/00012_saboteur_account_down.sql')
+const pinsMigration = read('supabase/migrations/00013_saboteur_pins_phases.sql')
+const pinsMigrationDown = read('supabase/migrations/00013_saboteur_pins_phases_down.sql')
+const namesMigration = read('supabase/migrations/00014_unique_player_names.sql')
 const schemaFile = read('supabase-schema.sql')
 const hostView = read('src/views/host.js')
 const playerView = read('src/views/player.js')
@@ -208,6 +211,72 @@ describe('Skjult agenda migration — security invariants', () => {
     // Reversible.
     expect(accountMigrationDown).toMatch(/drop function if exists owner_claim_saboteur_game\(uuid\)/)
     expect(accountMigrationDown).toMatch(/drop function if exists owner_list_saboteur_games\(\)/)
+  })
+
+  it('names are unique per game, enforced by an index (not just a check)', () => {
+    // The RPC check gives the friendly message; the index is what actually
+    // holds when two people submit the same name simultaneously.
+    expect(pinsMigration).toMatch(
+      /create unique index if not exists saboteur_participants_unique_name[\s\S]{0,160}on saboteur_participants \(saboteur_game_id, lower\(display_name\)\)/i
+    )
+    expect(pinsMigration).toMatch(/er allerede i bruk i dette spillet/)
+    // ...and the race that slips past the check is caught and reported.
+    expect(pinsMigration).toMatch(/exception when unique_violation then[\s\S]{0,160}ble akkurat tatt/)
+  })
+
+  it('every participant gets a unique 4-digit PIN', () => {
+    expect(pinsMigration).toMatch(/lpad\(floor\(random\(\) \* 10000\)::int::text, 4, '0'\)/)
+    expect(pinsMigration).toMatch(
+      /create unique index if not exists saboteur_participants_unique_pin[\s\S]{0,160}on saboteur_participants \(saboteur_game_id, pin\)/i
+    )
+    expect(pinsMigration).toMatch(/alter table saboteur_participants alter column pin set not null/i)
+  })
+
+  it('rejoin returns the SAME participant and does not leak which field was wrong', () => {
+    expect(pinsMigration).toMatch(/create or replace function rejoin_saboteur_game\(p_code text, p_name text, p_pin text\)/i)
+    // Matches on name AND pin together, then returns that row's existing token.
+    expect(pinsMigration).toMatch(/lower\(display_name\) = lower\(v_name\)\s*\n\s*and pin = v_pin/)
+    expect(pinsMigration).toMatch(/Fant ingen deltaker med det navnet og den PIN-en/)
+    // A guest who lost access mid-game must be able to return, so this is not
+    // restricted to draft the way join_saboteur_game is.
+    expect(pinsMigration).toMatch(/rejoin_saboteur_game[\s\S]*?status <> 'archived'/)
+  })
+
+  it('phase is validated server-side against a known list', () => {
+    expect(pinsMigration).toMatch(/if v_phase not in \('lobby', 'roller', 'oppdrag', 'avstemning', 'avsloring'\)/)
+  })
+
+  it('announcements are host-published and reach every participant', () => {
+    expect(pinsMigration).toMatch(/create table if not exists saboteur_announcements/i)
+    expect(pinsMigration).toMatch(/alter table saboteur_announcements enable row level security/i)
+    expect(pinsMigration).toMatch(/revoke all on saboteur_announcements from anon, authenticated/i)
+    // Publishing is host-only (resolved via _saboteur_host)...
+    expect(pinsMigration).toMatch(/host_publish_announcement[\s\S]{0,400}_saboteur_host\(p_host_token\)/)
+    // ...and the player brief carries them for everyone, not filtered by role.
+    expect(pinsMigration).toMatch(/'announcements', \(\s*\n\s*select coalesce\(json_agg/)
+  })
+
+  it('all new RPCs in 00013 are flag-gated', () => {
+    const rpcDefs = pinsMigration.match(
+      /^create or replace function (join_saboteur_game|rejoin_saboteur_game|host_\w+|get_my_saboteur_\w+)\(/gim
+    ) || []
+    const flagChecks = pinsMigration.match(/if not _saboteur_enabled\(\) then raise exception/g) || []
+    expect(rpcDefs.length).toBeGreaterThan(0)
+    expect(flagChecks.length).toBe(rpcDefs.length)
+  })
+
+  it('00013 is reversible', () => {
+    expect(pinsMigrationDown).toMatch(/drop table if exists saboteur_announcements/i)
+    expect(pinsMigrationDown).toMatch(/alter table saboteur_participants drop column if exists pin/i)
+    expect(pinsMigrationDown).toMatch(/alter table saboteur_games drop column if exists phase/i)
+  })
+
+  it('murder-mystery names are unique per party too, without an index that could break existing data', () => {
+    expect(namesMigration).toMatch(/er allerede i bruk på denne festen/)
+    expect(namesMigration).toMatch(/lower\(display_name\) = lower\(v_name\)/)
+    // Deliberately no unique index here: players is a live table that may
+    // already hold duplicates from past parties, and an index would fail.
+    expect(namesMigration).not.toMatch(/create unique index/i)
   })
 
   it('canonical supabase-schema.sql matches the standalone model', () => {
