@@ -56,11 +56,18 @@ describe('Skjult agenda is a STANDALONE game, not part of the murder mystery', (
     expect(migration).not.toMatch(/get_my_saboteur_brief\(p_player_token uuid, p_saboteur_game_id/i)
   })
 
-  it('the murder-mystery views no longer contain the feature at all', () => {
+  it('the murder-mystery views contain no Skjult agenda game logic', () => {
+    // The two games must share no data, state or RPCs. A plain navigation
+    // link is explicitly allowed (guests handed a Skjult agenda code will
+    // otherwise try it on the main page and get a confusing error) — but
+    // nothing beyond that.
     for (const [name, src] of [['host.js', hostView], ['player.js', playerView]]) {
-      expect(src, `${name} should not reference saboteur`).not.toMatch(/saboteur/i)
-      expect(src, `${name} should not import the flag`).not.toMatch(/SABOTEUR_GAME_ENABLED/)
+      expect(src, `${name} must not call a saboteur RPC`).not.toMatch(/rpc\(\s*['"][a-z_]*saboteur/i)
+      expect(src, `${name} must not import the saboteur view`).not.toMatch(/from\s+['"].*views\/saboteur/i)
+      expect(src, `${name} must not use saboteur tokens`).not.toMatch(/SaboteurHost|SaboteurPlayer/)
     }
+    // The host dashboard has no reason even to mention it.
+    expect(hostView).not.toMatch(/SABOTEUR_GAME_ENABLED/)
   })
 
   it('never drops or alters a murder-mystery table', () => {
