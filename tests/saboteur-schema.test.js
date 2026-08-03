@@ -21,6 +21,8 @@ const accountMigrationDown = read('supabase/migrations/00012_saboteur_account_do
 const pinsMigration = read('supabase/migrations/00013_saboteur_pins_phases.sql')
 const pinsMigrationDown = read('supabase/migrations/00013_saboteur_pins_phases_down.sql')
 const namesMigration = read('supabase/migrations/00014_unique_player_names.sql')
+const draftsMigration = read('supabase/migrations/00015_announcement_drafts.sql')
+const draftsMigrationDown = read('supabase/migrations/00015_announcement_drafts_down.sql')
 const schemaFile = read('supabase-schema.sql')
 const hostView = read('src/views/host.js')
 const playerView = read('src/views/player.js')
@@ -277,6 +279,36 @@ describe('Skjult agenda migration — security invariants', () => {
     // Deliberately no unique index here: players is a live table that may
     // already hold duplicates from past parties, and an index would fail.
     expect(namesMigration).not.toMatch(/create unique index/i)
+  })
+
+  it('UNPUBLISHED announcement drafts are never sent to players', () => {
+    // The single most important property of the draft feature: the player
+    // brief must filter on `published`, or a half-written message leaks.
+    const brief = draftsMigration.match(
+      /create or replace function get_my_saboteur_brief[\s\S]*?\nend \$\$;/i
+    )[0]
+    expect(brief).toMatch(/from saboteur_announcements a\s*\n\s*where a\.saboteur_game_id = v_game\.id and a\.published/)
+
+    // The host, by contrast, sees everything so drafts are manageable.
+    const hostGet = draftsMigration.match(
+      /create or replace function host_get_saboteur_game[\s\S]*?\nend \$\$;/i
+    )[0]
+    expect(hostGet).toMatch(/'published', a\.published/)
+    expect(hostGet).not.toMatch(/where a\.saboteur_game_id = v_game\.id and a\.published/)
+  })
+
+  it('announcements have a full draft/edit/publish/retract lifecycle', () => {
+    expect(draftsMigration).toMatch(/create or replace function host_upsert_announcement\(/i)
+    expect(draftsMigration).toMatch(/create or replace function host_set_announcement_published\(/i)
+    // Existing (pre-migration) announcements were live, so they must stay live:
+    // the column is added defaulting true, then flipped to false for new rows.
+    expect(draftsMigration).toMatch(/add column if not exists published boolean not null default true/i)
+    expect(draftsMigration).toMatch(/alter column published set default false/i)
+    // Re-publishing must not move the original publish time.
+    expect(draftsMigration).toMatch(/published_at = case when v_pub then coalesce\(published_at, now\(\)\) else null end/)
+    // Both new RPCs are flag-gated and host-scoped.
+    expect((draftsMigration.match(/if not _saboteur_enabled\(\) then raise exception/g) || []).length).toBe(4)
+    expect(draftsMigrationDown).toMatch(/drop function if exists host_upsert_announcement/i)
   })
 
   it('canonical supabase-schema.sql matches the standalone model', () => {
