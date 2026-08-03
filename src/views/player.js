@@ -175,7 +175,7 @@ function renderJoin() {
         // completely independent.
         state.error && SABOTEUR_GAME_ENABLED
           ? `<p class="hint">Skulle du spille <strong>Skjult agenda</strong>? Det er et eget spill —
-             <a href="/skjult.html">bli med her i stedet →</a></p>`
+             <a href="/skjult-agenda.html">bli med her i stedet →</a></p>`
           : ''
       }
 
@@ -190,7 +190,7 @@ function renderJoin() {
 
       <footer class="app-footer">
         <span>Er du verten? <a href="/host.html">${icon(I.host, { lead: true })}Til vertskontrollen</a></span>
-        ${SABOTEUR_GAME_ENABLED ? `<a href="/skjult.html">${icon(I.saboteur, { lead: true })}Skjult agenda</a>` : ''}
+        ${SABOTEUR_GAME_ENABLED ? `<a href="/skjult-agenda.html">${icon(I.saboteur, { lead: true })}Skjult agenda</a>` : ''}
       </footer>
     </div>`
 

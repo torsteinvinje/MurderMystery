@@ -39,7 +39,7 @@ export function topNav({ active = '', newFestInPage = false, cta: showCta = true
         ${link('/host.html', 'host', I.host, 'Vertskontroll')}
         ${link('/studio.html', 'studio', I.studio, 'Verkstedet')}
         ${link('/', 'player', I.guests, 'Til festen')}
-        ${SABOTEUR_GAME_ENABLED ? link('/skjult.html', 'skjult', I.saboteur, 'Skjult agenda') : ''}
+        ${SABOTEUR_GAME_ENABLED ? link('/skjult-agenda.html', 'skjult', I.saboteur, 'Skjult agenda') : ''}
         ${cta}
         <span id="nav-account" class="nav-account-slot">${link('/konto.html', 'konto', I.account, 'Konto')}</span>
       </div>

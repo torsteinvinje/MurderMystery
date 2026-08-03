@@ -20,6 +20,7 @@ import heroImg from '../assets/mood/parlor.webp'
 import { SABOTEUR_GAME_ENABLED } from '../lib/flags.js'
 import { topNav, wireTopNav } from '../lib/nav.js'
 import { getSession } from '../lib/auth.js'
+import { SABOTEUR_PHASES, saboteurPhaseIndex, saboteurPhase } from '../lib/saboteur-phases.js'
 import {
   loadSaboteurHost, saveSaboteurHost, clearSaboteurHost,
   loadSaboteurPlayer, saveSaboteurPlayer, clearSaboteurPlayer,
@@ -47,6 +48,7 @@ const state = {
 let flashTimer = null
 let pollTimer = null
 let pendingRender = false
+let lastSnapshot = '' // see dataChanged(): suppresses redraws that would change nothing
 
 const hostToken = () => loadSaboteurHost()?.host_token ?? null
 const playerToken = () => loadSaboteurPlayer()?.player_token ?? null
@@ -124,14 +126,36 @@ async function resumeGame(token) {
 // The standalone game has no game_events/Realtime plumbing of its own, so it
 // polls — cheap at party scale, and it also refreshes the moment a phone comes
 // back from sleep, which is the common case at a real party.
+//
+// Crucially the poll only REDRAWS when the data actually changed. Rebuilding
+// the DOM every 5 seconds regardless is what made the page visibly twitch and
+// lose your scroll position; most polls return exactly what's already on
+// screen, so the common case is now a no-op.
 function startPolling() {
   stopPolling()
-  const tick = () => {
-    if (state.screen === 'host') refreshHost().then(render)
-    else if (state.screen === 'player') refreshPlayer().then(render)
+  const tick = async () => {
+    if (state.screen === 'host') await refreshHost()
+    else if (state.screen === 'player') await refreshPlayer()
+    else return
+    if (dataChanged()) render()
   }
   pollTimer = setInterval(tick, 5000)
   document.addEventListener('visibilitychange', () => { if (!document.hidden) tick() })
+}
+
+// Snapshot of everything the current screen actually displays. Cheap enough at
+// this size, and far simpler than diffing the DOM.
+function snapshot() {
+  return state.screen === 'host'
+    ? JSON.stringify(state.game)
+    : JSON.stringify([state.brief, state.voteStatus, state.ballotTargets])
+}
+
+function dataChanged() {
+  const next = snapshot()
+  if (next === lastSnapshot) return false
+  lastSnapshot = next
+  return true
 }
 
 function stopPolling() {
@@ -244,6 +268,30 @@ async function onJoinGame(e) {
   render()
 }
 
+// Recover a lost participant with game code + name + personal PIN. Returns the
+// SAME participant, so role, objectives, tasks and hints are all still there.
+async function onRejoinGame(e) {
+  e.preventDefault()
+  if (state.busy) return
+  const f = e.target.elements
+  state.busy = true
+  state.error = ''
+  render()
+  try {
+    const joined = await rpc('rejoin_saboteur_game', {
+      p_code: f.code.value, p_name: f.name.value, p_pin: f.pin.value,
+    })
+    saveSaboteurPlayer({ player_token: joined.player_token, saboteur_game_id: joined.saboteur_game_id })
+    clearSaboteurHost()
+    await refreshPlayer()
+    state.screen = state.brief ? 'player' : 'landing'
+  } catch (err) {
+    state.error = err.message
+  }
+  state.busy = false
+  render()
+}
+
 async function doEndGame() {
   await hostAction('host_end_saboteur_game', {}, 'Spillet er avsluttet — rollene er nå synlige')
   state.confirmEnd = false
@@ -301,11 +349,18 @@ function render() {
   const withNav = state.screen === 'landing' || state.screen === 'host'
   const nav = withNav ? topNav({ active: 'skjult', cta: false }) : ''
 
+  // Replacing the whole page briefly collapses its height, which makes the
+  // browser scroll to the top. Restore the position so a refresh never yanks
+  // the host away from what they were reading.
+  const scrollY = window.scrollY
+
   app.innerHTML = `<div class="sheet">${nav}${body}</div>`
   if (withNav) wireTopNav(app)
   app.querySelectorAll('details[data-panel]').forEach((d) => {
     if (openPanels.has(d.dataset.panel)) d.open = true
   })
+  if (scrollY > 0) window.scrollTo(0, scrollY)
+  lastSnapshot = snapshot()
 
   if (state.flash) {
     app.insertAdjacentHTML('beforeend', `<div class="flash">${icon(I.ok, { lead: true })}${esc(state.flash)}</div>`)
@@ -406,6 +461,24 @@ function renderLanding() {
       </form>
     </div>
 
+    <details class="editor" data-panel="rejoin">
+      <summary>${icon(I.login, { lead: true })}Har du vært med før? Kom tilbake</summary>
+      <div class="card">
+        <p class="lede">Mistet tilgangen — ny telefon, tømt nettleser, eller trykket feil?
+        Bruk navnet ditt og den personlige koden verten ser i deltakerlista.</p>
+        <form data-hold id="rejoin-form">
+          <label for="r-code">Spillkode</label>
+          <input id="r-code" name="code" maxlength="4" autocapitalize="characters"
+                 autocomplete="off" spellcheck="false" required placeholder="F.eks. KX7M" />
+          <label for="r-name">Navnet ditt</label>
+          <input id="r-name" name="name" maxlength="40" required />
+          <label for="r-pin">Din personlige kode</label>
+          <input id="r-pin" name="pin" inputmode="numeric" maxlength="4" required placeholder="F.eks. 4570" />
+          <button ${state.busy ? 'disabled' : ''}>${state.busy ? 'Henter …' : `${icon(I.login, { lead: true })}Kom tilbake`}</button>
+        </form>
+      </div>
+    </details>
+
     <footer class="app-footer">
       <a href="/">${icon(I.back, { lead: true })}Til MurderMystery</a>
     </footer>`
@@ -425,7 +498,7 @@ function renderHost() {
         <span>Vertskontroll</span>
       </div>
       <h1>${esc(g.title)}</h1>
-      <p class="lede">Deltakerne blir med på <strong>/skjult.html</strong> med denne koden:</p>
+      <p class="lede">Deltakerne blir med på <strong>/skjult-agenda.html</strong> med denne koden:</p>
       <div class="code-display">${esc(g.code)}</div>
     </header>
 
@@ -457,6 +530,8 @@ function renderHost() {
       </label>
     </div>
 
+    ${renderHostRegi()}
+    ${renderHostAnnouncements()}
     ${renderHostParticipants(draft)}
     ${renderHostObjectives()}
     ${renderHostTasks()}
@@ -473,6 +548,61 @@ function renderHost() {
     </footer>`
 }
 
+// Kveldens regi: the same step-by-step director the murder mystery has.
+// Every guest's phone shows the matching line, so the whole room stays in sync.
+function renderHostRegi() {
+  const currentIdx = saboteurPhaseIndex(state.game.phase)
+
+  const steps = SABOTEUR_PHASES.map((phase, i) => {
+    const isCurrent = i === currentIdx
+    return `
+      <div class="phase-step${isCurrent ? ' current' : ''}">
+        <span class="num">${i + 1}.</span>
+        <div style="flex:1; min-width:0;">
+          <strong>${esc(phase.label)}</strong>${isCurrent ? ' <span class="badge red">nå</span>' : ''}
+          <p class="script">${esc(phase.script)}</p>
+        </div>
+        ${isCurrent ? '' : `<button class="btn-quiet" data-phase="${esc(phase.id)}">${icon(I.next, { lead: true })}Gå hit</button>`}
+      </div>`
+  }).join('')
+
+  return `
+    <h2>${icon(I.tabRegi, { lead: true })}Kveldens regi</h2>
+    <p class="lede">Deltakernes skjermer følger fasen du velger her — de oppdateres
+    med én gang du bytter.</p>
+    ${steps}`
+}
+
+// Free-text messages the host pushes to everyone, regardless of role. Distinct
+// from hints, which belong to a task and only reach selected Lojale.
+function renderHostAnnouncements() {
+  const list = state.game.announcements || []
+  const rows = list
+    .map((a) => `
+      <div class="card">
+        <p class="kicker">${icon(I.hint, { lead: true })}${esc(new Date(a.created_at).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }))}</p>
+        <p>${escMultiline(a.body)}</p>
+        <button class="btn-quiet" data-delete-announcement="${esc(a.id)}">${icon(I.del, { lead: true })}Slett</button>
+      </div>`)
+    .join('')
+
+  return `
+    <h2>${icon(I.hint, { lead: true })}Beskjeder til alle</h2>
+    <p class="lede">Går til alle deltakere uansett rolle — bruk det til felles hint,
+    regler eller kunngjøringer underveis.</p>
+    ${rows || '<p class="notice">Ingen beskjeder sendt ennå.</p>'}
+    <details class="editor" data-panel="new-announcement">
+      <summary>${icon(I.add, { lead: true })}Ny beskjed</summary>
+      <form data-hold id="new-announcement-form">
+        <label>Beskjed
+          <textarea name="body" maxlength="500" required
+            placeholder="F.eks. «Et av ryktene dere har hørt i kveld er plantet av en sabotør.»"></textarea>
+        </label>
+        <button>${icon(I.add, { lead: true })}Send til alle</button>
+      </form>
+    </details>`
+}
+
 function renderHostParticipants(draft) {
   const list = state.game.participants || []
   const rows = list
@@ -480,7 +610,10 @@ function renderHostParticipants(draft) {
       if (draft) {
         return `
           <div class="suspect-row">
-            <div class="who"><strong>${esc(p.display_name)}</strong></div>
+            <div class="who">
+              <strong>${esc(p.display_name)}</strong>
+              <div class="tagline">PIN ${esc(p.pin ?? '—')}</div>
+            </div>
             <div style="display:flex; gap:6px; align-items:center;">
               <select data-role="${esc(p.id)}">
                 <option value="" ${!p.role ? 'selected' : ''}>— ingen rolle —</option>
@@ -495,7 +628,7 @@ function renderHostParticipants(draft) {
         <div class="suspect-row">
           <div class="who">
             <strong>${esc(p.display_name)}</strong>
-            <div class="tagline">${p.role === 'SABOTEUR' ? 'Sabotør' : p.role === 'LOYAL' ? 'Lojal' : 'Ingen rolle'}${p.active ? '' : ' · inaktiv'} · ${p.points} poeng</div>
+            <div class="tagline">${p.role === 'SABOTEUR' ? 'Sabotør' : p.role === 'LOYAL' ? 'Lojal' : 'Ingen rolle'}${p.active ? '' : ' · inaktiv'} · ${p.points} poeng · PIN ${esc(p.pin ?? '—')}</div>
           </div>
           <button class="btn-quiet" data-active="${esc(p.id)}" data-is-active="${p.active}">
             ${p.active ? 'Sett inaktiv' : 'Sett aktiv'}
@@ -661,7 +794,31 @@ function renderPlayer() {
       <h1>${esc(b.title)}</h1>
       <span class="badge${b.status === 'voting' ? ' red' : ''}">${esc(STATUS_LABEL[b.status] ?? b.status)}</span>
     </header>
-    ${errorBlock()}`]
+    ${errorBlock()}
+
+    <div class="phase-hint">
+      <p class="kicker">Nå skjer det:</p>
+      <p>${esc(saboteurPhase(b.phase).player)}</p>
+    </div>
+
+    ${renderPlayerAnnouncements(b)}`]
+
+  // The PIN is what gets a guest back in if they clear their browser or tap
+  // "forlat" by mistake, so it's shown prominently while they're waiting and
+  // stays available (folded) once the game is running.
+  parts.push(
+    b.status === 'draft'
+      ? `<div class="card">
+           <p class="kicker">${icon(I.locked, { lead: true })}Din personlige kode</p>
+           <div class="code-display">${esc(b.my_pin ?? '····')}</div>
+           <p class="hint">Skriv den ned. Mister du tilgangen, kommer du tilbake med
+           spillkode, navnet ditt og denne koden.</p>
+         </div>`
+      : `<details class="editor" data-panel="my-pin">
+           <summary>${icon(I.locked, { lead: true })}Din personlige kode (for å komme tilbake)</summary>
+           <div class="card"><div class="code-display">${esc(b.my_pin ?? '····')}</div></div>
+         </details>`
+  )
 
   if (b.status === 'draft') {
     parts.push(`
@@ -744,6 +901,17 @@ function renderPlayer() {
   return parts.join('')
 }
 
+// Host announcements — shown to every participant regardless of role.
+function renderPlayerAnnouncements(b) {
+  const list = b.announcements || []
+  if (list.length === 0) return ''
+  return `
+    <div class="card">
+      <p class="kicker">${icon(I.hint, { lead: true })}Beskjed fra verten</p>
+      ${list.map((a) => `<p>${escMultiline(a.body)}</p>`).join('<hr class="divider" style="margin:12px 0;">')}
+    </div>`
+}
+
 function renderPlayerReveal(b) {
   const rows = b.reveal.participants
     .map((p) => `
@@ -785,6 +953,7 @@ function wireEvents() {
 
   bind('#create-form', 'submit', onCreateGame)
   bind('#join-form', 'submit', onJoinGame)
+  bind('#rejoin-form', 'submit', onRejoinGame)
   app.querySelectorAll('[data-resume]').forEach((btn) =>
     btn.addEventListener('click', () => resumeGame(btn.dataset.resume))
   )
@@ -795,6 +964,20 @@ function wireEvents() {
   // --- host ---
   app.querySelectorAll('[data-status]').forEach((btn) =>
     btn.addEventListener('click', () => hostAction('host_set_saboteur_status', { p_status: btn.dataset.status }))
+  )
+  app.querySelectorAll('[data-phase]').forEach((btn) =>
+    btn.addEventListener('click', () => hostAction('host_set_saboteur_phase', { p_phase: btn.dataset.phase }))
+  )
+  bind('#new-announcement-form', 'submit', (e) => {
+    e.preventDefault()
+    hostAction('host_publish_announcement', { p_body: e.target.elements.body.value }, 'Beskjed sendt')
+  })
+  app.querySelectorAll('[data-delete-announcement]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      if (confirm('Slette denne beskjeden?')) {
+        hostAction('host_delete_announcement', { p_announcement_id: btn.dataset.deleteAnnouncement }, 'Slettet')
+      }
+    })
   )
   bind('#end-btn', 'click', () => {
     if (state.confirmEnd) doEndGame()
