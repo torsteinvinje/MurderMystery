@@ -12,7 +12,6 @@ import { hero } from '../lib/hero.js'
 import heroJoin from '../assets/mood/study.webp'
 import { PHASES, phaseIndex, phaseLabel } from '../lib/phases.js'
 import { loadPlayer, savePlayer, clearPlayer } from '../lib/tokens.js'
-import { SABOTEUR_GAME_ENABLED } from '../lib/flags.js'
 
 const app = document.querySelector('#app')
 
@@ -27,15 +26,6 @@ const state = {
   suspicions: new Map(), // suspect_id -> level (0–3)
   reveal: null,
   secretShown: false,
-
-  // Skjult agenda (opt-in hidden-identity mode). All null/empty when the
-  // flag is off, no such game exists for this party, or I'm not in it —
-  // in every one of those cases the card below simply doesn't render.
-  saboteurGameId: null,
-  saboteurBrief: null, // get_my_saboteur_brief result
-  saboteurVoteStatus: null, // get_my_saboteur_vote_status result
-  saboteurBallotTargets: [],
-  saboteurBusy: false,
 }
 
 let stopWatching = null
@@ -98,41 +88,7 @@ async function refresh() {
     }
   }
 
-  await refreshSaboteurBrief()
   render()
-}
-
-// Loaded defensively: flag off, no Skjult agenda for this party, or I'm not
-// a participant in it are all the SAME outcome here — the card just doesn't
-// render. Never lets a Skjult agenda hiccup affect the murder-mystery view.
-async function refreshSaboteurBrief() {
-  if (!SABOTEUR_GAME_ENABLED) return
-  const t = token()
-  try {
-    const disc = await rpc('get_my_saboteur_game_id', { p_player_token: t })
-    const sabId = disc.saboteur_game_id
-    if (!sabId) {
-      state.saboteurGameId = null
-      state.saboteurBrief = null
-      state.saboteurVoteStatus = null
-      state.saboteurBallotTargets = []
-      return
-    }
-    state.saboteurGameId = sabId
-    const [brief, voteStatus] = await Promise.all([
-      rpc('get_my_saboteur_brief', { p_player_token: t, p_saboteur_game_id: sabId }),
-      rpc('get_my_saboteur_vote_status', { p_player_token: t, p_saboteur_game_id: sabId }),
-    ])
-    state.saboteurBrief = brief
-    state.saboteurVoteStatus = voteStatus
-    state.saboteurBallotTargets = voteStatus.can_vote
-      ? await rpc('get_saboteur_ballot_targets', { p_player_token: t, p_saboteur_game_id: sabId })
-      : []
-  } catch {
-    state.saboteurBrief = null
-    state.saboteurVoteStatus = null
-    state.saboteurBallotTargets = []
-  }
 }
 
 // --------------------------------------------------------------------------
@@ -174,44 +130,6 @@ async function cycleSuspicion(suspectId) {
     state.suspicions.set(suspectId, current) // roll back if the write failed
     render()
   }
-}
-
-// Skjult agenda actions. Errors are swallowed deliberately, matching this
-// file's existing idiom (cycleSuspicion above does the same): refetching the
-// brief afterward makes the UI reflect whatever actually happened server-side
-// rather than surfacing a banner the game screen has no slot for.
-async function claimSaboteurObjective(objectiveId) {
-  try {
-    await rpc('claim_saboteur_objective', {
-      p_player_token: token(), p_saboteur_game_id: state.saboteurGameId, p_objective_id: objectiveId,
-    })
-  } catch { /* refreshSaboteurBrief() below reflects the true state either way */ }
-  await refreshSaboteurBrief()
-  render()
-}
-
-async function claimSaboteurTask(taskId) {
-  try {
-    await rpc('claim_saboteur_task', {
-      p_player_token: token(), p_saboteur_game_id: state.saboteurGameId, p_task_id: taskId,
-    })
-  } catch { /* see claimSaboteurObjective */ }
-  await refreshSaboteurBrief()
-  render()
-}
-
-async function castSaboteurBallot(targetParticipantId) {
-  state.saboteurBusy = true
-  render()
-  try {
-    await rpc('cast_saboteur_ballot', {
-      p_player_token: token(), p_saboteur_game_id: state.saboteurGameId,
-      p_round_id: state.saboteurVoteStatus?.round_id, p_target_participant_id: targetParticipantId,
-    })
-  } catch { /* see claimSaboteurObjective */ }
-  await refreshSaboteurBrief()
-  state.saboteurBusy = false
-  render()
 }
 
 function leaveGame() {
@@ -309,11 +227,6 @@ function renderGame() {
     parts.push(renderRoleCard(suspect))
   }
 
-  // Skjult agenda: a separate, optional hidden-identity mode with its own
-  // lifecycle (draft/active/voting/paused/ended) — shown whenever I'm a
-  // participant in one, independent of the murder-mystery's own phase.
-  parts.push(renderSaboteurBrief())
-
   // Polaroid evidence, as soon as the host has revealed any.
   if (state.polaroids.length > 0 && !state.reveal) {
     parts.push(`<h2>${icon(I.evidence, { lead: true })}Bevis fra åstedet</h2>`)
@@ -347,20 +260,6 @@ function renderGame() {
   app.querySelectorAll('[data-suspect]').forEach((btn) => {
     btn.addEventListener('click', () => cycleSuspicion(btn.dataset.suspect))
   })
-
-  app.querySelectorAll('[data-sab-claim-objective]').forEach((btn) =>
-    btn.addEventListener('click', () => claimSaboteurObjective(btn.dataset.sabClaimObjective))
-  )
-  app.querySelectorAll('[data-sab-claim-task]').forEach((btn) =>
-    btn.addEventListener('click', () => claimSaboteurTask(btn.dataset.sabClaimTask))
-  )
-  const sabVoteForm = app.querySelector('#sab-vote-form')
-  if (sabVoteForm) {
-    sabVoteForm.addEventListener('submit', (e) => {
-      e.preventDefault()
-      castSaboteurBallot(e.target.elements.target.value)
-    })
-  }
 }
 
 function renderRoleCard(suspect) {
@@ -445,127 +344,5 @@ function renderReveal() {
       <p class="killer-name">${esc(killer.name)}</p>
       <p class="lede">${esc(killer.tagline)}</p>
       <div class="resolution">${escMultiline(resolution)}</div>
-    </div>`
-}
-
-// --- Skjult agenda: hidden-identity social-deduction mode (opt-in) -----------
-// Reuses the same .card/.badge/.reveal-card/.tally classes as the rest of
-// this file — no new visual language for the new mode.
-
-const SAB_ITEM_LABEL = { assigned: 'Tildelt', claimed: 'Krevd — venter på verten', approved: 'Godkjent', rejected: 'Avslått' }
-
-function renderSaboteurBrief() {
-  const b = state.saboteurBrief
-  // Not a participant, feature off, or the host hasn't started the game yet
-  // (still in draft — role assignment can still change) — nothing renders.
-  if (!b || b.status === 'draft') return ''
-
-  if (b.status === 'ended' && b.reveal) {
-    const rows = b.reveal.participants
-      .map(
-        (p) => `
-        <div class="suspect-row">
-          <div class="who"><strong>${esc(p.display_name)}</strong></div>
-          <span class="badge${p.role === 'SABOTEUR' ? ' red' : ' ok'}">${p.role === 'SABOTEUR' ? 'Sabotør' : 'Lojal'}</span>
-        </div>`
-      )
-      .join('')
-    const scoreBlock = b.reveal.leaderboard
-      ? `<table class="tally">
-          <thead><tr><th>Spiller</th><th>Poeng</th></tr></thead>
-          <tbody>${b.reveal.leaderboard.map((x) => `<tr><td>${esc(x.display_name)}</td><td>${x.points}</td></tr>`).join('')}</tbody>
-        </table>`
-      : `<p class="lede">Dine poeng: <strong>${esc(b.reveal.my_points)}</strong></p>`
-
-    return `
-      <h2>${icon(I.saboteur, { lead: true })}Skjult agenda — avslørt</h2>
-      <div class="reveal-card">
-        <span class="stamp">${icon(I.reveal, { lead: true })}Rollene er avslørt</span>
-        ${rows}
-      </div>
-      ${scoreBlock}`
-  }
-
-  const parts = [`<h2>${icon(I.saboteur, { lead: true })}Skjult agenda</h2>`]
-
-  parts.push(`
-    <div class="card">
-      <p class="kicker">Din rolle</p>
-      <h3>${b.my_role === 'SABOTEUR' ? `${icon(I.saboteur, { lead: true })}Sabotør` : `${icon(I.loyal, { lead: true })}Lojal`}</h3>
-      ${
-        b.my_role === 'SABOTEUR' && b.fellow_saboteurs.length > 0
-          ? `<p class="lede">Du kjenner de andre Sabotørene: ${b.fellow_saboteurs.map((f) => esc(f.display_name)).join(', ')}</p>`
-          : ''
-      }
-    </div>`)
-
-  if (b.my_role === 'SABOTEUR') {
-    parts.push(renderSaboteurObjectivesForPlayer(b.objectives))
-  } else {
-    parts.push(renderSaboteurTasksForPlayer(b.tasks))
-    if (b.hints.length > 0) {
-      parts.push(`
-        <div class="card">
-          <p class="kicker">${icon(I.hint, { lead: true })}Hint du har låst opp</p>
-          ${b.hints.map((h) => `<p>${escMultiline(h.hint_text)}</p>`).join('')}
-        </div>`)
-    }
-  }
-
-  if (state.saboteurVoteStatus?.can_vote) {
-    parts.push(renderSaboteurVotingForPlayer())
-  } else if (state.saboteurVoteStatus?.round_open && state.saboteurVoteStatus?.already_voted) {
-    parts.push(`<div class="card"><p>${icon(I.ok, { lead: true })}Du har stemt i denne runden. Vent på verten.</p></div>`)
-  }
-
-  return parts.join('')
-}
-
-function renderSaboteurObjectivesForPlayer(objectives) {
-  if (!objectives || objectives.length === 0) {
-    return `<p class="lede">Ingen mål tildelt ennå.</p>`
-  }
-  return objectives
-    .map(
-      (o) => `
-      <div class="card">
-        <p class="kicker">${o.points} poeng${o.status !== 'assigned' ? ` · ${esc(SAB_ITEM_LABEL[o.status] ?? o.status)}` : ''}</p>
-        <h3>${esc(o.title)}</h3>
-        ${o.description ? `<p>${escMultiline(o.description)}</p>` : ''}
-        ${o.status === 'assigned' ? `<button data-sab-claim-objective="${esc(o.id)}">${icon(I.claim, { lead: true })}Jeg har gjort dette</button>` : ''}
-      </div>`
-    )
-    .join('')
-}
-
-function renderSaboteurTasksForPlayer(tasks) {
-  if (!tasks || tasks.length === 0) {
-    return `<p class="lede">Ingen oppgaver tildelt ennå.</p>`
-  }
-  return tasks
-    .map(
-      (t) => `
-      <div class="card">
-        ${t.status !== 'assigned' ? `<p class="kicker">${esc(SAB_ITEM_LABEL[t.status] ?? t.status)}</p>` : ''}
-        <h3>${esc(t.title)}</h3>
-        ${t.description ? `<p>${escMultiline(t.description)}</p>` : ''}
-        ${t.status === 'assigned' ? `<button data-sab-claim-task="${esc(t.id)}">${icon(I.claim, { lead: true })}Jeg har gjort dette</button>` : ''}
-      </div>`
-    )
-    .join('')
-}
-
-function renderSaboteurVotingForPlayer() {
-  const options = state.saboteurBallotTargets
-    .map((t) => `<option value="${esc(t.participant_id)}">${esc(t.display_name)}</option>`)
-    .join('')
-  return `
-    <div class="card">
-      <p class="kicker">${icon(I.ballot, { lead: true })}Avstemning er åpen</p>
-      <form id="sab-vote-form">
-        <label for="sab-vote-target">Hvem mistenker du?</label>
-        <select id="sab-vote-target" name="target">${options}</select>
-        <button ${state.saboteurBusy ? 'disabled' : ''}>${state.saboteurBusy ? 'Sender …' : `${icon(I.ballot, { lead: true })}Stem`}</button>
-      </form>
     </div>`
 }
