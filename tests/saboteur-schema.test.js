@@ -16,6 +16,8 @@ const read = (p) => readFileSync(join(root, p), 'utf8')
 
 const migration = read('supabase/migrations/00011_saboteur_standalone.sql')
 const migrationDown = read('supabase/migrations/00011_saboteur_standalone_down.sql')
+const accountMigration = read('supabase/migrations/00012_saboteur_account.sql')
+const accountMigrationDown = read('supabase/migrations/00012_saboteur_account_down.sql')
 const schemaFile = read('supabase-schema.sql')
 const hostView = read('src/views/host.js')
 const playerView = read('src/views/player.js')
@@ -186,6 +188,26 @@ describe('Skjult agenda migration — security invariants', () => {
         .map((s) => s.replace(/^drop table if exists /i, ''))
     )
     expect(dropped).toEqual(created)
+  })
+
+  it('account functions require login and are scoped to the caller', () => {
+    // Both must refuse when signed out, and the listing must filter on the
+    // caller's own uid — it returns host_tokens, so an unscoped query would
+    // hand over control of other people's games.
+    expect(accountMigration).toMatch(/owner_list_saboteur_games[\s\S]*?if v_uid is null then\s*\n\s*raise exception/)
+    expect(accountMigration).toMatch(/owner_claim_saboteur_game[\s\S]*?if v_uid is null then\s*\n\s*raise exception/)
+    expect(accountMigration).toMatch(/from saboteur_games g\s*\n\s*where g\.owner_id = v_uid/)
+    // Claiming must never steal a game already owned by a different account.
+    expect(accountMigration).toMatch(/owner_id is not null and v_game\.owner_id <> v_uid[\s\S]{0,120}raise exception/)
+    // Only signed-in users; never anon.
+    expect(accountMigration).toMatch(/grant execute on function owner_list_saboteur_games\(\) to authenticated;/)
+    expect(accountMigration).not.toMatch(/owner_list_saboteur_games\(\) to anon/)
+    expect(accountMigration).not.toMatch(/owner_claim_saboteur_game\(uuid\) to anon/)
+    // Flag-gated like everything else.
+    expect((accountMigration.match(/if not _saboteur_enabled\(\) then raise exception/g) || []).length).toBe(2)
+    // Reversible.
+    expect(accountMigrationDown).toMatch(/drop function if exists owner_claim_saboteur_game\(uuid\)/)
+    expect(accountMigrationDown).toMatch(/drop function if exists owner_list_saboteur_games\(\)/)
   })
 
   it('canonical supabase-schema.sql matches the standalone model', () => {

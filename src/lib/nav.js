@@ -9,10 +9,13 @@ import { esc } from './util.js'
 import { currentAccount } from './auth.js'
 import { SABOTEUR_GAME_ENABLED } from './flags.js'
 
-// active: 'host' | 'studio' | 'player' — which page is current.
+// active: 'host' | 'studio' | 'player' | 'konto' | 'skjult' — current page.
 // newFestInPage: when true, the CTA is an in-page button (host dashboard,
 //   where starting a new party ends the current one) instead of a plain link.
-export function topNav({ active = '', newFestInPage = false } = {}) {
+// cta: pass false to drop the "Start ny fest" button. Used on the Skjult
+//   agenda page, where a prominent button that starts a MURDER MYSTERY would
+//   be actively misleading.
+export function topNav({ active = '', newFestInPage = false, cta: showCta = true } = {}) {
   const link = (href, id, iconName, label) => {
     const current = active === id
     return `<a class="nav-link${current ? ' active' : ''}" href="${href}"${
@@ -20,9 +23,11 @@ export function topNav({ active = '', newFestInPage = false } = {}) {
     }>${icon(iconName, { lead: true })}${label}</a>`
   }
 
-  const cta = newFestInPage
-    ? `<button type="button" class="nav-cta" data-nav="new-fest">${icon(I.newGame, { lead: true })}Start ny fest</button>`
-    : `<a class="nav-cta" href="/host.html">${icon(I.newGame, { lead: true })}Start ny fest</a>`
+  const cta = !showCta
+    ? ''
+    : newFestInPage
+      ? `<button type="button" class="nav-cta" data-nav="new-fest">${icon(I.newGame, { lead: true })}Start ny fest</button>`
+      : `<a class="nav-cta" href="/host.html">${icon(I.newGame, { lead: true })}Start ny fest</a>`
 
   return `
     <nav class="topnav" aria-label="Hovedmeny">
