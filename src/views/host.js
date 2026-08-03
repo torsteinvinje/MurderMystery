@@ -84,10 +84,10 @@ async function loadCatalog() {
 function startWatching() {
   if (stopWatching) stopWatching()
   if (!state.game?.id) return
-  stopWatching = watchGame(state.game.id, () => refreshAll().catch(() => {}))
+  stopWatching = watchGame(state.game.id, () => refreshAll({ background: true }).catch(() => {}))
 }
 
-async function refreshAll() {
+async function refreshAll({ background = false } = {}) {
   const t = token()
   if (!t) return
   const [game, players, suspects, polaroids, suspicions] = await Promise.all([
@@ -98,7 +98,11 @@ async function refreshAll() {
     rpc('host_get_suspicions', { p_host_token: t }),
   ])
   Object.assign(state, { game, players, suspects, polaroids, suspicions })
-  render()
+  // Realtime pokes are background updates and must not interrupt typing;
+  // everything else is a direct result of the host clicking something and
+  // should show up immediately.
+  if (background) pokeRender()
+  else render()
 }
 
 // --------------------------------------------------------------------------
@@ -170,14 +174,29 @@ async function newGame() {
 // Rendering
 // --------------------------------------------------------------------------
 
-// A poke can arrive while the host is typing in an edit form. Instead of
-// wiping their text, we hold the redraw until focus leaves the form.
-function render() {
+// Is focus currently inside a form we must not disturb?
+function typingInForm() {
   const active = document.activeElement
-  if (active && app.contains(active) && active.closest('[data-hold]')) {
+  return Boolean(active && app.contains(active) && active.closest('[data-hold]'))
+}
+
+// A realtime poke can arrive while the host is typing in an edit form. Instead
+// of wiping their text, hold that redraw until focus leaves the form.
+//
+// Only BACKGROUND updates go through here. A user-initiated change calls
+// render() directly and redraws at once — deferring those was a bug: after
+// clicking "Lagre" the submit button still holds focus inside the very
+// [data-hold] form being protected, so the "Lagret" confirmation (and any
+// error) stayed hidden until the host clicked elsewhere.
+function pokeRender() {
+  if (typingInForm()) {
     pendingRender = true
     return
   }
+  render()
+}
+
+function render() {
   pendingRender = false
 
   if (state.screen === 'loading') {
@@ -195,10 +214,7 @@ function render() {
 app.addEventListener('focusout', () => {
   // Wait a beat so document.activeElement points at the *next* focused element.
   setTimeout(() => {
-    const active = document.activeElement
-    if (pendingRender && !(active && app.contains(active) && active.closest('[data-hold]'))) {
-      render()
-    }
+    if (pendingRender && !typingInForm()) render()
   }, 60)
 })
 

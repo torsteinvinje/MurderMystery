@@ -137,7 +137,7 @@ function startPolling() {
     if (state.screen === 'host') await refreshHost()
     else if (state.screen === 'player') await refreshPlayer()
     else return
-    if (dataChanged()) render()
+    if (dataChanged()) pollRender()
   }
   pollTimer = setInterval(tick, 5000)
   document.addEventListener('visibilitychange', () => { if (!document.hidden) tick() })
@@ -317,16 +317,26 @@ const ITEM_STATUS_LABEL = {
   approved: 'Godkjent', rejected: 'Avslått',
 }
 
-function render() {
-  // The 5s poll must never yank the rug out from under the host while they're
-  // filling in a form: re-rendering replaces the DOM, which would close the
-  // open panel and discard whatever they'd typed. So while focus is inside a
-  // [data-hold] region we defer the redraw and run it once they leave.
+// Is focus currently inside a form we must not disturb?
+function typingInForm() {
   const active = document.activeElement
-  if (active && app.contains(active) && active.closest('[data-hold]')) {
+  return Boolean(active && app.contains(active) && active.closest('[data-hold]'))
+}
+
+// Used ONLY by the background poll. A user-initiated change always goes
+// through render() below and redraws immediately — deferring those was a bug:
+// after clicking "Lagre" the submit button still has focus, and it sits inside
+// the very [data-hold] form being protected, so the confirmation (and any
+// error) was swallowed until the host happened to click somewhere else.
+function pollRender() {
+  if (typingInForm()) {
     pendingRender = true
     return
   }
+  render()
+}
+
+function render() {
   pendingRender = false
 
   // Panels are collapsed <details>; remember which were open so a background
@@ -368,15 +378,12 @@ function render() {
   wireEvents()
 }
 
-// Run the redraw we suppressed once focus actually leaves the form.
+// Run the poll's suppressed redraw once focus actually leaves the form.
 app.addEventListener('focusout', () => {
   // Wait a tick so document.activeElement points at the NEXT focused element
-  // (clicking straight from a field to the submit button must not trigger it).
+  // (moving from a field to the submit button must not count as leaving).
   setTimeout(() => {
-    const active = document.activeElement
-    if (pendingRender && !(active && app.contains(active) && active.closest('[data-hold]'))) {
-      render()
-    }
+    if (pendingRender && !typingInForm()) render()
   }, 60)
 })
 
