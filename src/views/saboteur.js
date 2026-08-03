@@ -137,7 +137,7 @@ function startPolling() {
     if (state.screen === 'host') await refreshHost()
     else if (state.screen === 'player') await refreshPlayer()
     else return
-    if (dataChanged()) render()
+    if (dataChanged()) pollRender()
   }
   pollTimer = setInterval(tick, 5000)
   document.addEventListener('visibilitychange', () => { if (!document.hidden) tick() })
@@ -200,6 +200,33 @@ function showFlash(text) {
 }
 
 // Wrapper for host actions: run, surface errors, refresh, optional toast.
+// Which database update introduced each RPC. When the code is deployed but
+// the migration hasn't been run in Supabase yet, PostgREST reports a bare
+// "Could not find the function ..." — useless to a host mid-party. Map it to
+// something actionable instead.
+const RPC_MIGRATION = {
+  host_upsert_announcement: '00015_announcement_drafts.sql',
+  host_set_announcement_published: '00015_announcement_drafts.sql',
+  host_delete_announcement: '00013_saboteur_pins_phases.sql',
+  host_publish_announcement: '00013_saboteur_pins_phases.sql',
+  host_set_saboteur_phase: '00013_saboteur_pins_phases.sql',
+  rejoin_saboteur_game: '00013_saboteur_pins_phases.sql',
+  owner_list_saboteur_games: '00012_saboteur_account.sql',
+  owner_claim_saboteur_game: '00012_saboteur_account.sql',
+}
+
+function friendlyError(err, rpcName) {
+  const msg = err?.message || 'Ukjent feil'
+  const missingFunction = /could not find the function|schema cache|does not exist/i.test(msg)
+  if (missingFunction) {
+    const file = RPC_MIGRATION[rpcName]
+    return file
+      ? `Databasen mangler en oppdatering: kjør «${file}» i Supabase (SQL Editor), og deretter «NOTIFY pgrst, 'reload schema';». Teknisk melding: ${msg}`
+      : `Databasen mangler en oppdatering for «${rpcName}». Kjør migrasjonene i supabase/migrations/ i Supabase. Teknisk melding: ${msg}`
+  }
+  return msg
+}
+
 async function hostAction(name, params = {}, flashText = '') {
   state.error = ''
   try {
@@ -208,7 +235,7 @@ async function hostAction(name, params = {}, flashText = '') {
     if (flashText) showFlash(flashText)
     else render()
   } catch (err) {
-    state.error = err.message
+    state.error = friendlyError(err, name)
     render()
   }
 }
@@ -221,7 +248,7 @@ async function playerAction(name, params = {}, flashText = '') {
     if (flashText) showFlash(flashText)
     else render()
   } catch (err) {
-    state.error = err.message
+    state.error = friendlyError(err, name)
     render()
   }
 }
@@ -317,16 +344,26 @@ const ITEM_STATUS_LABEL = {
   approved: 'Godkjent', rejected: 'Avslått',
 }
 
-function render() {
-  // The 5s poll must never yank the rug out from under the host while they're
-  // filling in a form: re-rendering replaces the DOM, which would close the
-  // open panel and discard whatever they'd typed. So while focus is inside a
-  // [data-hold] region we defer the redraw and run it once they leave.
+// Is focus currently inside a form we must not disturb?
+function typingInForm() {
   const active = document.activeElement
-  if (active && app.contains(active) && active.closest('[data-hold]')) {
+  return Boolean(active && app.contains(active) && active.closest('[data-hold]'))
+}
+
+// Used ONLY by the background poll. A user-initiated change always goes
+// through render() below and redraws immediately — deferring those was a bug:
+// after clicking "Lagre" the submit button still has focus, and it sits inside
+// the very [data-hold] form being protected, so the confirmation (and any
+// error) was swallowed until the host happened to click somewhere else.
+function pollRender() {
+  if (typingInForm()) {
     pendingRender = true
     return
   }
+  render()
+}
+
+function render() {
   pendingRender = false
 
   // Panels are collapsed <details>; remember which were open so a background
@@ -368,15 +405,12 @@ function render() {
   wireEvents()
 }
 
-// Run the redraw we suppressed once focus actually leaves the form.
+// Run the poll's suppressed redraw once focus actually leaves the form.
 app.addEventListener('focusout', () => {
   // Wait a tick so document.activeElement points at the NEXT focused element
-  // (clicking straight from a field to the submit button must not trigger it).
+  // (moving from a field to the submit button must not count as leaving).
   setTimeout(() => {
-    const active = document.activeElement
-    if (pendingRender && !(active && app.contains(active) && active.closest('[data-hold]'))) {
-      render()
-    }
+    if (pendingRender && !typingInForm()) render()
   }, 60)
 })
 
@@ -1017,12 +1051,11 @@ function wireEvents() {
   bind('#new-announcement-form', 'submit', async (e) => {
     e.preventDefault()
     const f = e.target.elements
-    const publishNow = f.publish_now.checked
+    const publishNow = f.publish_now ? f.publish_now.checked : true
+    const body = f.body.value
     state.error = ''
     try {
-      const created = await rpc('host_upsert_announcement', {
-        p_host_token: hostToken(), p_body: f.body.value,
-      })
+      const created = await rpc('host_upsert_announcement', { p_host_token: hostToken(), p_body: body })
       if (publishNow) {
         await rpc('host_set_announcement_published', {
           p_host_token: hostToken(), p_announcement_id: created.id, p_published: true,
@@ -1031,7 +1064,23 @@ function wireEvents() {
       await refreshHost()
       showFlash(publishNow ? 'Beskjed publisert' : 'Utkast lagret')
     } catch (err) {
-      state.error = err.message
+      // If 00015 hasn't been run yet, the draft functions don't exist — but
+      // the older publish-immediately function from 00013 might. Fall back to
+      // it so the host can still get a message out mid-party; drafts simply
+      // aren't available until the migration is applied.
+      if (/could not find the function|schema cache|does not exist/i.test(err?.message || '')) {
+        try {
+          await rpc('host_publish_announcement', { p_host_token: hostToken(), p_body: body })
+          await refreshHost()
+          showFlash('Beskjed publisert')
+          return
+        } catch (fallbackErr) {
+          state.error = friendlyError(fallbackErr, 'host_upsert_announcement')
+          render()
+          return
+        }
+      }
+      state.error = friendlyError(err, 'host_upsert_announcement')
       render()
     }
   })
