@@ -27,6 +27,7 @@ const libraryMigration = read('supabase/migrations/00016_saboteur_intro_library.
 const triggerMigration = read('supabase/migrations/00017_hint_trigger.sql')
 const deleteMigration = read('supabase/migrations/00018_delete_objectives_tasks.sql')
 const saboteurView = read('src/views/saboteur.js')
+const librariesMigration = read('supabase/migrations/00019_task_and_hint_libraries.sql')
 const schemaFile = read('supabase-schema.sql')
 const hostView = read('src/views/host.js')
 const playerView = read('src/views/player.js')
@@ -401,6 +402,50 @@ describe('Skjult agenda migration — security invariants', () => {
     expect(saboteurView).toMatch(/state\.pending = key\s*\n\s*render\(\)/)
     // And a double-click cannot fire the same action twice.
     expect(saboteurView).toMatch(/if \(state\.pending\) return/)
+  })
+
+  it('seeds 25 Lojal tasks and 10 hint cards', () => {
+    const taskRows = (librariesMigration.match(/insert into saboteur_task_library[\s\S]*?;\n/)[0]
+      .match(/^\s{2}\(\d+,\s+'/gm) || []).length
+    const hintRows = (librariesMigration.match(/insert into saboteur_hint_library[\s\S]*?;\n/)[0]
+      .match(/^\s{2}\(\d+,\s+'/gm) || []).length
+    expect(taskRows).toBe(25)
+    expect(hintRows).toBe(10)
+    // Seeding is guarded, so re-running never duplicates.
+    expect(librariesMigration).toMatch(/if exists \(select 1 from saboteur_task_library\) then\s*\n\s*return;/)
+    expect(librariesMigration).toMatch(/if exists \(select 1 from saboteur_hint_library\) then\s*\n\s*return;/)
+  })
+
+  it('an empty hint field means a random card; explicit text still wins', () => {
+    expect(librariesMigration).toMatch(/v_text := nullif\(trim\(coalesce\(v_task\.hint_text, ''\)\), ''\)/)
+    expect(librariesMigration).toMatch(/if v_text is null then[\s\S]{0,400}order by random\(\) limit 1/)
+  })
+
+  it('random hints do not repeat: per player, or per game for all_loyal', () => {
+    // One player must not be dealt the same card twice...
+    expect(librariesMigration).toMatch(
+      /where hr\.released_to_participant_id = v_task\.assigned_participant_id\s*\n\s*and hr\.library_hint_id = l\.id/
+    )
+    // ...and an all_loyal deal gives ONE shared card, not a different one each,
+    // so nobody reads meaning into the difference.
+    expect(librariesMigration).toMatch(/where t2\.saboteur_game_id = v_task\.saboteur_game_id\s*\n\s*and hr\.library_hint_id = l\.id/)
+    expect(librariesMigration).toMatch(/select v_task\.id, sp\.id, v_text, v_lib_id/)
+  })
+
+  it('the released hint text is stored on the release, not re-derived', () => {
+    // A random card exists nowhere on the task, so the release has to carry it
+    // — which also keeps history correct if the library is edited later.
+    expect(librariesMigration).toMatch(/alter table saboteur_hint_releases add column if not exists hint_text text/i)
+    expect(librariesMigration).toMatch(/'hint_text', coalesce\(nullif\(hr\.hint_text, ''\), t\.hint_text\)/)
+    // Existing releases are backfilled so every row behaves the same.
+    expect(librariesMigration).toMatch(/update saboteur_hint_releases hr\s*\n\s*set hint_text = t\.hint_text/)
+  })
+
+  it('hint cards are host-only; task titles are not', () => {
+    // Players are meant to earn the hints, not read the deck.
+    expect(librariesMigration).toMatch(/create or replace function host_list_saboteur_hint_library\(p_host_token uuid\)/i)
+    expect(librariesMigration).toMatch(/host_list_saboteur_hint_library[\s\S]{0,400}_saboteur_host\(p_host_token\)/)
+    expect(saboteurView).toMatch(/host_list_saboteur_hint_library[\s\S]{0,200}hostToken\(\)/)
   })
 
   it('canonical supabase-schema.sql matches the standalone model', () => {
