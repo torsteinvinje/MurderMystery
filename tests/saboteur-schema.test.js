@@ -25,6 +25,8 @@ const draftsMigration = read('supabase/migrations/00015_announcement_drafts.sql'
 const draftsMigrationDown = read('supabase/migrations/00015_announcement_drafts_down.sql')
 const libraryMigration = read('supabase/migrations/00016_saboteur_intro_library.sql')
 const triggerMigration = read('supabase/migrations/00017_hint_trigger.sql')
+const deleteMigration = read('supabase/migrations/00018_delete_objectives_tasks.sql')
+const saboteurView = read('src/views/saboteur.js')
 const schemaFile = read('supabase-schema.sql')
 const hostView = read('src/views/host.js')
 const playerView = read('src/views/player.js')
@@ -360,6 +362,45 @@ describe('Skjult agenda migration — security invariants', () => {
     expect(triggerMigration).toMatch(/on conflict \(task_id, released_to_participant_id\) do nothing/)
     // The old 7-arg signature is dropped so PostgREST isn't left ambiguous.
     expect(triggerMigration).toMatch(/drop function if exists host_upsert_task\(uuid, uuid, uuid, text, text, text, text\);/)
+  })
+
+  it('deleting an approved objective takes its points back', () => {
+    // Otherwise the leaderboard shows points from an objective nobody can see.
+    expect(deleteMigration).toMatch(
+      /delete from saboteur_points_ledger\s*\n\s*where source_type = 'objective' and source_id = v_obj\.id/
+    )
+    // Both deletes are host-scoped and flag-gated like everything else.
+    expect(deleteMigration).toMatch(/host_delete_objective[\s\S]{0,600}_saboteur_host\(p_host_token\)/)
+    expect(deleteMigration).toMatch(/host_delete_task[\s\S]{0,600}_saboteur_host\(p_host_token\)/)
+    expect((deleteMigration.match(/if not _saboteur_enabled\(\) then raise exception/g) || []).length).toBe(2)
+    // Scoped to the caller's own game, so an id from another game is rejected.
+    expect(deleteMigration).toMatch(/where id = p_objective_id and saboteur_game_id = v_game\.id/)
+    expect(deleteMigration).toMatch(/where id = p_task_id and saboteur_game_id = v_game\.id/)
+  })
+
+  it('the host panel offers edit and delete for objectives and tasks', () => {
+    for (const hook of [
+      'data-edit-objective', 'data-delete-objective',
+      'data-edit-task', 'data-delete-task',
+    ]) {
+      expect(saboteurView, `${hook} should exist in the host panel`).toContain(hook)
+    }
+    expect(saboteurView).toMatch(/host_delete_objective/)
+    expect(saboteurView).toMatch(/host_delete_task/)
+  })
+
+  it('title fields suggest the library without restricting free text', () => {
+    // <datalist> suggests; it never blocks a typed value.
+    expect(saboteurView).toMatch(/<datalist id="objective-examples">/)
+    expect(saboteurView).toMatch(/list="objective-examples"/)
+  })
+
+  it('submit buttons report progress immediately', () => {
+    // An add is two round trips; without this the button looks dead.
+    expect(saboteurView).toMatch(/async function hostActionPending\(/)
+    expect(saboteurView).toMatch(/state\.pending = key\s*\n\s*render\(\)/)
+    // And a double-click cannot fire the same action twice.
+    expect(saboteurView).toMatch(/if \(state\.pending\) return/)
   })
 
   it('canonical supabase-schema.sql matches the standalone model', () => {
