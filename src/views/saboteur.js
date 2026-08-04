@@ -45,6 +45,10 @@ const state = {
   myGames: [], // owner_list_saboteur_games result
 
   library: [], // list_saboteur_objective_library — 30 ready-made objectives
+  hostTab: 'regi', // see HOST_TABS
+  // Which form is mid-submit, so its button can say so immediately instead of
+  // looking dead for the two round trips an action takes.
+  pending: '',
 }
 
 let flashTimer = null
@@ -239,6 +243,28 @@ function friendlyError(err, rpcName) {
       : `Databasen mangler en oppdatering for «${rpcName}». Kjør migrasjonene i supabase/migrations/ i Supabase. Teknisk melding: ${msg}`
   }
   return msg
+}
+
+// Same as hostAction, but flips a button into a "…" state and redraws BEFORE
+// the request goes out. An add/save takes two round trips (the write, then the
+// refresh), which is long enough that a silent button reads as broken.
+async function hostActionPending(key, name, params = {}, flashText = '') {
+  if (state.pending) return // already submitting — ignore the double-click
+  state.pending = key
+  render()
+  try {
+    await hostAction(name, params, flashText)
+  } finally {
+    state.pending = ''
+    render()
+  }
+}
+
+// Label helper: shows the busy text while this form is submitting.
+function pendingLabel(key, idleLabel, busyText, iconName) {
+  return state.pending === key
+    ? esc(busyText)
+    : `${icon(iconName, { lead: true })}${esc(idleLabel)}`
 }
 
 async function hostAction(name, params = {}, flashText = '') {
@@ -534,6 +560,28 @@ function renderLanding() {
 
 // --- Host control panel ------------------------------------------------------
 
+// The host panel is split into tabs the same way the murder-mystery host view
+// is — one long scrolling page was unmanageable mid-party. "Verksted" is the
+// preparation bench (intro, objectives, tasks); the other tabs are for
+// actually running the evening.
+const HOST_TABS = [
+  ['regi', 'Regi', I.tabRegi],
+  ['deltakere', 'Deltakere', I.guestsCount],
+  ['verksted', 'Verksted', I.studio],
+  ['beskjeder', 'Beskjeder', I.hint],
+  ['avstemning', 'Avstemning', I.ballot],
+]
+
+function renderHostTab(draft) {
+  switch (state.hostTab) {
+    case 'deltakere': return renderHostParticipants(draft)
+    case 'verksted': return `${renderHostIntro()}${renderHostObjectives()}${renderHostTasks()}`
+    case 'beskjeder': return renderHostAnnouncements()
+    case 'avstemning': return renderHostVoting()
+    default: return renderHostRegi()
+  }
+}
+
 function renderHost() {
   const g = state.game
   const draft = g.status === 'draft'
@@ -578,13 +626,14 @@ function renderHost() {
       </label>
     </div>
 
-    ${renderHostIntro()}
-    ${renderHostRegi()}
-    ${renderHostAnnouncements()}
-    ${renderHostParticipants(draft)}
-    ${renderHostObjectives()}
-    ${renderHostTasks()}
-    ${renderHostVoting()}
+    <nav class="tabnav">
+      ${HOST_TABS.map(([id, label, iconName]) => `
+        <button data-host-tab="${id}" class="${state.hostTab === id ? 'active' : ''}">
+          ${icon(iconName, { lead: true })}${label}
+        </button>`).join('')}
+    </nav>
+
+    <main>${renderHostTab(draft)}</main>
 
     <details class="editor" id="audit-details" data-panel="audit">
       <summary>${icon(I.locked, { lead: true })}Hendelseslogg (kun for deg)</summary>
@@ -790,6 +839,28 @@ function renderHostObjectives() {
               <button data-decide-objective="${esc(o.id)}" data-approve="true">${icon(I.ok, { lead: true })}Godkjenn</button>
               <button class="btn-quiet" data-decide-objective="${esc(o.id)}" data-approve="false">Avslå</button>
             </div>` : ''}
+          <details class="editor" data-panel="edit-objective-${esc(o.id)}">
+            <summary>${icon(I.edit, { lead: true })}Rediger eller slett</summary>
+            <form data-hold data-edit-objective="${esc(o.id)}">
+              <label>Tittel
+                <input name="title" value="${esc(o.title)}" maxlength="160" required
+                       list="objective-examples" autocomplete="off" />
+              </label>
+              <label>Beskrivelse <textarea name="description">${esc(o.description ?? '')}</textarea></label>
+              <label>Poeng <input name="points" type="number" min="0" value="${esc(o.points)}" /></label>
+              <div class="btn-row">
+                <button ${state.pending ? 'disabled' : ''}>
+                  ${pendingLabel(`obj-edit-${o.id}`, 'Lagre endring', 'Lagrer …', I.save)}
+                </button>
+                <button type="button" class="btn-quiet" data-delete-objective="${esc(o.id)}">
+                  ${icon(I.del, { lead: true })}Slett målet
+                </button>
+              </div>
+              ${o.status === 'approved'
+                ? '<p class="hint">Målet er godkjent — sletter du det, trekkes poengene tilbake.</p>'
+                : ''}
+            </form>
+          </details>
         </div>`
     })
     .join('')
@@ -815,7 +886,9 @@ function renderHostObjectives() {
             <label>Til
               <select name="participant_id">${saboteurTargetOptions(saboteurs)}</select>
             </label>
-            <button>${icon(I.add, { lead: true })}Legg til fra biblioteket</button>
+            <button ${state.pending ? 'disabled' : ''}>
+              ${pendingLabel('obj-library', 'Legg til fra biblioteket', 'Legger til …', I.add)}
+            </button>
           </form>
         </div>` : ''}
 
@@ -825,12 +898,31 @@ function renderHostObjectives() {
           <label>Til
             <select name="participant_id">${saboteurTargetOptions(saboteurs)}</select>
           </label>
-          <label>Tittel <input name="title" maxlength="160" required placeholder="F.eks. «Få gruppa til å spille tre selskapsleker»" /></label>
+          <label>Tittel
+            <input name="title" maxlength="160" required list="objective-examples"
+                   autocomplete="off" placeholder="Skriv fritt, eller velg fra lista" />
+          </label>
+          <p class="hint">Klikk i feltet for å se de ${state.library.length} ferdige forslagene — du kan også skrive helt fritt.</p>
           <label>Beskrivelse (valgfritt) <textarea name="description"></textarea></label>
           <label>Poeng <input name="points" type="number" min="0" value="2" /></label>
-          <button>${icon(I.add, { lead: true })}Legg til mål</button>
+          <button ${state.pending ? 'disabled' : ''}>
+            ${pendingLabel('obj-new', 'Legg til mål', 'Legger til …', I.add)}
+          </button>
         </form>
-      </details>`}`
+      </details>`}
+
+    ${objectiveExamplesDatalist()}`
+}
+
+// A <datalist> gives the title field a dropdown of every ready-made objective
+// while still accepting free text — exactly the "suggest, don't restrict"
+// behaviour wanted here. Rendered once and shared by every title input.
+function objectiveExamplesDatalist() {
+  if (state.library.length === 0) return ''
+  return `
+    <datalist id="objective-examples">
+      ${state.library.map((l) => `<option value="${esc(l.title)}"></option>`).join('')}
+    </datalist>`
 }
 
 // An empty value means "let the database pick" — the draw happens server-side,
@@ -884,6 +976,31 @@ function renderHostTasks() {
               <button data-decide-task="${esc(t.id)}" data-approve="true">${icon(I.ok, { lead: true })}Godkjenn</button>
               <button class="btn-quiet" data-decide-task="${esc(t.id)}" data-approve="false">Avslå</button>
             </div>` : ''}
+          <details class="editor" data-panel="edit-task-${esc(t.id)}">
+            <summary>${icon(I.edit, { lead: true })}Rediger eller slett</summary>
+            <form data-hold data-edit-task="${esc(t.id)}">
+              <label>Tittel <input name="title" value="${esc(t.title)}" maxlength="160" required /></label>
+              <label>Beskrivelse <textarea name="description">${esc(t.description ?? '')}</textarea></label>
+              <label>Hint <textarea name="hint_text">${esc(t.hint_text ?? '')}</textarea></label>
+              <label>Hvem får hintet?
+                <select name="hint_audience">
+                  <option value="assignee" ${t.hint_audience === 'assignee' ? 'selected' : ''}>Bare denne spilleren</option>
+                  <option value="all_loyal" ${t.hint_audience === 'all_loyal' ? 'selected' : ''}>Alle Lojale</option>
+                </select>
+              </label>
+              <div class="btn-row">
+                <button ${state.pending ? 'disabled' : ''}>
+                  ${pendingLabel(`task-edit-${t.id}`, 'Lagre endring', 'Lagrer …', I.save)}
+                </button>
+                <button type="button" class="btn-quiet" data-delete-task="${esc(t.id)}">
+                  ${icon(I.del, { lead: true })}Slett oppgaven
+                </button>
+              </div>
+              ${t.hint_released
+                ? '<p class="hint">Hintet er allerede delt ut — sletter du oppgaven, forsvinner det fra spillerens kort.</p>'
+                : ''}
+            </form>
+          </details>
         </div>`
     })
     .join('')
@@ -920,7 +1037,9 @@ function renderHostTasks() {
           <p class="hint">Kobler du hintet til et mål, blir det et <strong>direkte hint</strong>:
           det slippes først når den sabotasjen faktisk har skjedd og du har godkjent den.
           ✓ betyr at målet allerede er godkjent.</p>
-          <button>${icon(I.add, { lead: true })}Legg til oppgave</button>
+          <button ${state.pending ? 'disabled' : ''}>
+            ${pendingLabel('task-new', 'Legg til oppgave', 'Legger til …', I.add)}
+          </button>
         </form>
       </details>`
       : '<p class="lede">Gi noen rollen Lojal for å kunne legge til oppgaver.</p>'}`
@@ -1265,11 +1384,18 @@ function wireEvents() {
     hostAction('host_set_saboteur_intro', { p_intro: e.target.elements.intro.value }, 'Introduksjon lagret')
   })
 
+  app.querySelectorAll('[data-host-tab]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      state.hostTab = btn.dataset.hostTab
+      render()
+    })
+  )
+
   bind('#library-form', 'submit', (e) => {
     e.preventDefault()
     const f = e.target.elements
     // Empty select value -> null -> the database draws at random.
-    hostAction('host_add_objective_from_library', {
+    hostActionPending('obj-library', 'host_add_objective_from_library', {
       p_library_id: f.library_id.value || null,
       p_participant_id: f.participant_id.value || null,
     }, 'Mål lagt til')
@@ -1278,13 +1404,56 @@ function wireEvents() {
   bind('#new-objective-form', 'submit', (e) => {
     e.preventDefault()
     const f = e.target.elements
-    hostAction('host_upsert_objective', {
+    hostActionPending('obj-new', 'host_upsert_objective', {
       p_participant_id: f.participant_id.value || null, // null = random Sabotør
       p_title: f.title.value,
       p_description: f.description.value,
       p_points: Number(f.points.value) || 0,
     }, 'Mål lagt til')
   })
+
+  app.querySelectorAll('[data-edit-objective]').forEach((form) =>
+    form.addEventListener('submit', (e) => {
+      e.preventDefault()
+      const f = e.target.elements
+      const id = form.dataset.editObjective
+      hostActionPending(`obj-edit-${id}`, 'host_upsert_objective', {
+        p_objective_id: id,
+        p_title: f.title.value,
+        p_description: f.description.value,
+        p_points: Number(f.points.value) || 0,
+      }, 'Lagret')
+    })
+  )
+  app.querySelectorAll('[data-delete-objective]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      if (confirm('Slette dette målet? Er det godkjent, trekkes poengene tilbake.')) {
+        hostAction('host_delete_objective', { p_objective_id: btn.dataset.deleteObjective }, 'Målet er slettet')
+      }
+    })
+  )
+
+  app.querySelectorAll('[data-edit-task]').forEach((form) =>
+    form.addEventListener('submit', (e) => {
+      e.preventDefault()
+      const f = e.target.elements
+      const id = form.dataset.editTask
+      hostActionPending(`task-edit-${id}`, 'host_upsert_task', {
+        p_task_id: id,
+        p_title: f.title.value,
+        p_description: f.description.value,
+        p_hint_text: f.hint_text.value,
+        p_hint_audience: f.hint_audience.value,
+      }, 'Lagret')
+    })
+  )
+  app.querySelectorAll('[data-delete-task]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      if (confirm('Slette denne oppgaven? Et hint som alt er delt ut forsvinner også.')) {
+        hostAction('host_delete_task', { p_task_id: btn.dataset.deleteTask }, 'Oppgaven er slettet')
+      }
+    })
+  )
   app.querySelectorAll('[data-decide-objective]').forEach((btn) =>
     btn.addEventListener('click', () => {
       const approve = btn.dataset.approve === 'true'
@@ -1297,7 +1466,7 @@ function wireEvents() {
   bind('#new-task-form', 'submit', (e) => {
     e.preventDefault()
     const f = e.target.elements
-    hostAction('host_upsert_task', {
+    hostActionPending('task-new', 'host_upsert_task', {
       p_participant_id: f.participant_id.value || null, // null = random Lojal
       p_title: f.title.value,
       p_description: f.description.value,
