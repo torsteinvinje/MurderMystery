@@ -33,6 +33,11 @@ Appen er vertens saksmappe og gjestenes rollekort — kjøreplanen er regien.
 - [Supabase](https://supabase.com) — Postgres med RLS, RPC-er og Realtime
 - [Netlify](https://netlify.com) — hosting, bygger automatisk fra `main`
 
+> **Skal du sette opp alt fra bunnen av — eller overta driften?**
+> Se [`docs/BUILD-AND-DEPLOY.md`](docs/BUILD-AND-DEPLOY.md): en fullstendig
+> teknisk gjennomgang av bygg, database, testing, deploy til Netlify,
+> feilsøking, rollback og vedlikehold, med en «bygg fra null»-sjekkliste.
+
 ## Kom i gang lokalt
 
 1. **Installer avhengigheter** (krever Node.js 20.19+):
