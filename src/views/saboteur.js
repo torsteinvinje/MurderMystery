@@ -45,6 +45,8 @@ const state = {
   myGames: [], // owner_list_saboteur_games result
 
   library: [], // list_saboteur_objective_library — 30 ready-made objectives
+  taskLibrary: [], // list_saboteur_task_library — 25 ready-made Lojal tasks
+  hintLibrary: [], // host_list_saboteur_hint_library — the 10 hint cards
   hostTab: 'regi', // see HOST_TABS
   // Which form is mid-submit, so its button can say so immediately instead of
   // looking dead for the two round trips an action takes.
@@ -173,11 +175,28 @@ function stopPolling() {
 // The ready-made objective library is shared by all games and never changes
 // mid-party, so it's fetched once rather than on every poll.
 async function loadLibrary() {
-  if (state.library.length > 0) return
-  try {
-    state.library = await rpc('list_saboteur_objective_library')
-  } catch {
-    state.library = [] // migration 00016 not applied yet — the picker just hides
+  if (state.library.length === 0) {
+    try {
+      state.library = await rpc('list_saboteur_objective_library')
+    } catch {
+      state.library = [] // migration 00016 not applied yet — the picker just hides
+    }
+  }
+  if (state.taskLibrary.length === 0) {
+    try {
+      state.taskLibrary = await rpc('list_saboteur_task_library')
+    } catch {
+      state.taskLibrary = [] // migration 00019 not applied yet
+    }
+  }
+  // Host-only: the hint cards are content the Lojale are meant to discover,
+  // so they never travel to a player's browser.
+  if (state.hintLibrary.length === 0 && hostToken()) {
+    try {
+      state.hintLibrary = await rpc('host_list_saboteur_hint_library', { p_host_token: hostToken() })
+    } catch {
+      state.hintLibrary = []
+    }
   }
 }
 
@@ -952,6 +971,21 @@ function renderTaskTrigger(t) {
     </p>`
 }
 
+// The hint cards the Lojale can be dealt. Host-only and folded away — it's
+// content they're meant to earn, not read over your shoulder.
+function renderHintLibraryReference() {
+  if (state.hintLibrary.length === 0) return ''
+  return `
+    <details class="editor" data-panel="hint-library">
+      <summary>${icon(I.locked, { lead: true })}Hintkortene (${state.hintLibrary.length}) — kun for deg</summary>
+      <div class="card">
+        <p class="lede">Disse deles ut tilfeldig når du godkjenner en oppgave uten
+        egen hinttekst. Konkrete nok til å hjelpe, vage nok til ikke å avsløre noen.</p>
+        <ul>${state.hintLibrary.map((h) => `<li>${esc(h.body)}</li>`).join('')}</ul>
+      </div>
+    </details>`
+}
+
 function renderHostTasks() {
   const participants = state.game.participants || []
   const loyals = participants.filter((p) => p.role === 'LOYAL')
@@ -1008,9 +1042,33 @@ function renderHostTasks() {
   return `
     <h2>${icon(I.task, { lead: true })}Oppgaver til de Lojale</h2>
     ${cards || '<p class="notice">Ingen oppgaver lagt til ennå.</p>'}
+    ${loyals.length > 0 && state.taskLibrary.length > 0 ? `
+      <div class="card">
+        <p class="kicker">${icon(I.shuffle, { lead: true })}Ferdige oppgaver (${state.taskLibrary.length})</p>
+        <p class="lede">Gi én oppgave av gangen. Når du godkjenner den, får spilleren
+        et tilfeldig hintkort — så de lojale blir etterforskere, ikke bare mistenksomme.</p>
+        <form data-hold id="task-library-form">
+          <label>Oppgave
+            <select name="library_id">
+              <option value="">🎲 Trekk en tilfeldig oppgave</option>
+              ${state.taskLibrary.map((l) => `<option value="${esc(l.id)}">${esc(l.title)}</option>`).join('')}
+            </select>
+          </label>
+          <label>Til
+            <select name="participant_id">
+              <option value="">🎲 Tilfeldig Lojal</option>
+              ${loyals.map((p) => `<option value="${esc(p.id)}">${esc(p.display_name)}</option>`).join('')}
+            </select>
+          </label>
+          <button ${state.pending ? 'disabled' : ''}>
+            ${pendingLabel('task-library', 'Legg til fra biblioteket', 'Legger til …', I.add)}
+          </button>
+        </form>
+      </div>` : ''}
+    ${renderHintLibraryReference()}
     ${loyals.length > 0 ? `
       <details class="editor" data-panel="new-task">
-        <summary>${icon(I.add, { lead: true })}Ny oppgave</summary>
+        <summary>${icon(I.add, { lead: true })}Skriv en egen oppgave</summary>
         <form data-hold id="new-task-form">
           <label>Til
             <select name="participant_id">
@@ -1020,7 +1078,12 @@ function renderHostTasks() {
           </label>
           <label>Tittel <input name="title" maxlength="160" required placeholder="F.eks. «Få gruppa til å le uten å forklare hvorfor»" /></label>
           <label>Beskrivelse (valgfritt) <textarea name="description"></textarea></label>
-          <label>Hint som låses opp <textarea name="hint_text" placeholder="Gis når du godkjenner"></textarea></label>
+          <label>Hint som låses opp
+            <textarea name="hint_text"
+              placeholder="La stå tom for å gi et tilfeldig hintkort ved godkjenning"></textarea>
+          </label>
+          <p class="hint">Tomt felt = spilleren får et tilfeldig kort fra hintbiblioteket,
+          og aldri det samme kortet to ganger. Skriv du noe her, brukes din tekst i stedet.</p>
           <label>Hvem får hintet?
             <select name="hint_audience">
               <option value="assignee">Bare denne spilleren</option>
@@ -1399,6 +1462,15 @@ function wireEvents() {
       p_library_id: f.library_id.value || null,
       p_participant_id: f.participant_id.value || null,
     }, 'Mål lagt til')
+  })
+
+  bind('#task-library-form', 'submit', (e) => {
+    e.preventDefault()
+    const f = e.target.elements
+    hostActionPending('task-library', 'host_add_task_from_library', {
+      p_library_id: f.library_id.value || null,
+      p_participant_id: f.participant_id.value || null,
+    }, 'Oppgave lagt til')
   })
 
   bind('#new-objective-form', 'submit', (e) => {
