@@ -23,6 +23,8 @@ const pinsMigrationDown = read('supabase/migrations/00013_saboteur_pins_phases_d
 const namesMigration = read('supabase/migrations/00014_unique_player_names.sql')
 const draftsMigration = read('supabase/migrations/00015_announcement_drafts.sql')
 const draftsMigrationDown = read('supabase/migrations/00015_announcement_drafts_down.sql')
+const libraryMigration = read('supabase/migrations/00016_saboteur_intro_library.sql')
+const triggerMigration = read('supabase/migrations/00017_hint_trigger.sql')
 const schemaFile = read('supabase-schema.sql')
 const hostView = read('src/views/host.js')
 const playerView = read('src/views/player.js')
@@ -309,6 +311,55 @@ describe('Skjult agenda migration — security invariants', () => {
     // Both new RPCs are flag-gated and host-scoped.
     expect((draftsMigration.match(/if not _saboteur_enabled\(\) then raise exception/g) || []).length).toBe(4)
     expect(draftsMigrationDown).toMatch(/drop function if exists host_upsert_announcement/i)
+  })
+
+  it('the objective library holds all 30 entries and is copied, not referenced', () => {
+    const rows = libraryMigration.match(/^\s+\(\d+,\s+'/gm) || []
+    expect(rows.length).toBe(30)
+    // Adding from the library copies title+points into the game, so later
+    // library edits can't rewrite an objective mid-party.
+    expect(libraryMigration).toMatch(
+      /insert into saboteur_objectives \(saboteur_game_id, assigned_participant_id, title, points\)\s*\n\s*values \(v_game\.id, v_target, v_lib\.title, v_lib\.points\)/
+    )
+    // Seeding is guarded so re-running never duplicates or overwrites.
+    expect(libraryMigration).toMatch(/if exists \(select 1 from saboteur_objective_library\)\s*\n\s*then\s*\n\s*return;|if exists \(select 1 from saboteur_objective_library\) then\s*\n\s*return;/)
+  })
+
+  it('random assignment is drawn server-side, never supplied by the client', () => {
+    expect(libraryMigration).toMatch(/create or replace function _saboteur_random_participant\(p_game_id uuid, p_role text\)/i)
+    expect(libraryMigration).toMatch(/order by random\(\) limit 1/)
+    // The helper is internal only.
+    expect(libraryMigration).toMatch(/revoke execute on function _saboteur_random_participant\(uuid, text\) from public, anon, authenticated/)
+    // A null target means "draw one", and only among ACTIVE members of the right role.
+    expect(libraryMigration).toMatch(/v_target := _saboteur_random_participant\(v_game\.id, 'SABOTEUR'\)/)
+    expect(libraryMigration).toMatch(/v_target := _saboteur_random_participant\(v_game\.id, 'LOYAL'\)/)
+    expect(libraryMigration).toMatch(/where saboteur_game_id = p_game_id and role = p_role and active/)
+  })
+
+  it('the intro text lives on the game so the host can edit it', () => {
+    expect(libraryMigration).toMatch(/alter table saboteur_games add column if not exists intro text not null default/i)
+    expect(libraryMigration).toMatch(/create or replace function host_set_saboteur_intro\(p_host_token uuid, p_intro text\)/i)
+    // It reaches both the host panel and every player's brief.
+    expect(libraryMigration).toMatch(/'intro', v_game\.intro/)
+  })
+
+  it('a linked hint requires BOTH the task and its trigger objective to be approved', () => {
+    // No link -> release as before; link -> only once that objective is approved.
+    expect(triggerMigration).toMatch(/if v_task\.trigger_objective_id is null then\s*\n\s*v_ok := true;/)
+    expect(triggerMigration).toMatch(/select \(status = 'approved'\) into v_ok\s*\n\s*from saboteur_objectives where id = v_task\.trigger_objective_id/)
+    // The task must already be approved before anything is released.
+    expect(triggerMigration).toMatch(/if not found or v_task\.status <> 'approved' then\s*\n\s*return 0;/)
+  })
+
+  it('order does not matter: approving the objective later still releases the hint', () => {
+    // Objective approval sweeps up already-approved tasks waiting on it.
+    expect(triggerMigration).toMatch(
+      /select id from saboteur_tasks\s*\n\s*where saboteur_game_id = v_game\.id\s*\n\s*and trigger_objective_id = v_obj\.id\s*\n\s*and status = 'approved'/
+    )
+    // Release stays idempotent whichever path triggers it.
+    expect(triggerMigration).toMatch(/on conflict \(task_id, released_to_participant_id\) do nothing/)
+    // The old 7-arg signature is dropped so PostgREST isn't left ambiguous.
+    expect(triggerMigration).toMatch(/drop function if exists host_upsert_task\(uuid, uuid, uuid, text, text, text, text\);/)
   })
 
   it('canonical supabase-schema.sql matches the standalone model', () => {

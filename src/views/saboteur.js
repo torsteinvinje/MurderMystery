@@ -43,6 +43,8 @@ const state = {
   // account instead of only this device's localStorage.
   loggedIn: false,
   myGames: [], // owner_list_saboteur_games result
+
+  library: [], // list_saboteur_objective_library — 30 ready-made objectives
 }
 
 let flashTimer = null
@@ -65,6 +67,7 @@ async function init() {
 
   if (hostToken()) {
     await refreshHost()
+    await loadLibrary()
     // Started a game before signing in? Attach it now, so it shows up under
     // "Mine spill" from here on. Safe and idempotent: holding the host token
     // already grants full control of that game.
@@ -161,6 +164,17 @@ function dataChanged() {
 function stopPolling() {
   if (pollTimer) clearInterval(pollTimer)
   pollTimer = null
+}
+
+// The ready-made objective library is shared by all games and never changes
+// mid-party, so it's fetched once rather than on every poll.
+async function loadLibrary() {
+  if (state.library.length > 0) return
+  try {
+    state.library = await rpc('list_saboteur_objective_library')
+  } catch {
+    state.library = [] // migration 00016 not applied yet — the picker just hides
+  }
 }
 
 async function refreshHost() {
@@ -564,6 +578,7 @@ function renderHost() {
       </label>
     </div>
 
+    ${renderHostIntro()}
     ${renderHostRegi()}
     ${renderHostAnnouncements()}
     ${renderHostParticipants(draft)}
@@ -580,6 +595,29 @@ function renderHost() {
       <span>Kode ${esc(g.code)}</span>
       <a href="#" id="leave-link">${icon(I.leave, { lead: true })}Avslutt på denne enheten</a>
     </footer>`
+}
+
+// The framing every participant reads before play starts: don't show your
+// screen, don't share your messages, trust no one. Stored on the game (not
+// hardcoded), so the host can rewrite it here for their own group.
+function renderHostIntro() {
+  const intro = state.game.intro ?? ''
+  return `
+    <h2>${icon(I.briefing, { lead: true })}Introduksjon</h2>
+    <p class="lede">Dette er rammen deltakerne leser på sin egen telefon før spillet
+    starter. Endre den som du vil — teksten er ikke låst.</p>
+    <div class="card">
+      <p>${escMultiline(intro) || '<em>Ingen introduksjon satt.</em>'}</p>
+      <details class="editor" data-panel="edit-intro">
+        <summary>${icon(I.edit, { lead: true })}Rediger introduksjonen</summary>
+        <form data-hold id="intro-form">
+          <label>Introduksjonstekst
+            <textarea name="intro" rows="12" maxlength="4000">${esc(intro)}</textarea>
+          </label>
+          <button>${icon(I.save, { lead: true })}Lagre introduksjon</button>
+        </form>
+      </details>
+    </div>`
 }
 
 // Kveldens regi: the same step-by-step director the murder mystery has.
@@ -759,26 +797,74 @@ function renderHostObjectives() {
   return `
     <h2>${icon(I.objective, { lead: true })}Mål til Sabotørene</h2>
     ${cards || '<p class="notice">Ingen mål lagt til ennå.</p>'}
-    ${saboteurs.length > 0 ? `
+    ${saboteurs.length === 0
+      ? '<p class="lede">Gi noen rollen Sabotør for å kunne legge til mål.</p>'
+      : `
+      ${state.library.length > 0 ? `
+        <div class="card">
+          <p class="kicker">${icon(I.shuffle, { lead: true })}Ferdige mål (${state.library.length})</p>
+          <p class="lede">Slipp å finne på alt selv. Trekk et tilfeldig mål, eller velg
+          ett fra lista — og bestem om det skal gå til en tilfeldig Sabotør eller en bestemt.</p>
+          <form data-hold id="library-form">
+            <label>Mål
+              <select name="library_id">
+                <option value="">🎲 Trekk et tilfeldig mål</option>
+                ${state.library.map((l) => `<option value="${esc(l.id)}">${esc(l.title)} (${l.points} p)</option>`).join('')}
+              </select>
+            </label>
+            <label>Til
+              <select name="participant_id">${saboteurTargetOptions(saboteurs)}</select>
+            </label>
+            <button>${icon(I.add, { lead: true })}Legg til fra biblioteket</button>
+          </form>
+        </div>` : ''}
+
       <details class="editor" data-panel="new-objective">
-        <summary>${icon(I.add, { lead: true })}Nytt mål</summary>
+        <summary>${icon(I.add, { lead: true })}Skriv et eget mål</summary>
         <form data-hold id="new-objective-form">
-          <label>Sabotør
-            <select name="participant_id">${saboteurs.map((p) => `<option value="${esc(p.id)}">${esc(p.display_name)}</option>`).join('')}</select>
+          <label>Til
+            <select name="participant_id">${saboteurTargetOptions(saboteurs)}</select>
           </label>
           <label>Tittel <input name="title" maxlength="160" required placeholder="F.eks. «Få gruppa til å spille tre selskapsleker»" /></label>
           <label>Beskrivelse (valgfritt) <textarea name="description"></textarea></label>
-          <label>Poeng <input name="points" type="number" min="0" value="10" /></label>
+          <label>Poeng <input name="points" type="number" min="0" value="2" /></label>
           <button>${icon(I.add, { lead: true })}Legg til mål</button>
         </form>
-      </details>`
-      : '<p class="lede">Gi noen rollen Sabotør for å kunne legge til mål.</p>'}`
+      </details>`}`
+}
+
+// An empty value means "let the database pick" — the draw happens server-side,
+// so the client can't influence who is chosen.
+function saboteurTargetOptions(saboteurs) {
+  return `
+    <option value="">🎲 Tilfeldig Sabotør</option>
+    ${saboteurs.map((p) => `<option value="${esc(p.id)}">${esc(p.display_name)}</option>`).join('')}`
+}
+
+// Shows the optional link between a hint and a Sabotør objective, and — the
+// part that matters mid-party — whether the hint has actually gone out or is
+// still waiting for that sabotage to be approved.
+function renderTaskTrigger(t) {
+  if (!t.trigger_objective_id) return ''
+  const done = t.trigger_objective_status === 'approved'
+  return `
+    <p class="hint">
+      ${icon(done ? I.ok : I.locked, { lead: true })}
+      Direkte hint, knyttet til målet «${esc(t.trigger_objective_title ?? '—')}».
+      ${t.hint_released
+        ? 'Sluppet.'
+        : done
+          ? 'Målet er godkjent — hintet slippes så snart oppgaven godkjennes.'
+          : 'Venter: hintet slippes først når det målet er godkjent.'}
+      <button class="btn-quiet" data-clear-trigger="${esc(t.id)}">Fjern koblingen</button>
+    </p>`
 }
 
 function renderHostTasks() {
   const participants = state.game.participants || []
   const loyals = participants.filter((p) => p.role === 'LOYAL')
   const tasks = state.game.tasks || []
+  const objectives = state.game.objectives || []
 
   const cards = tasks
     .map((t) => {
@@ -790,8 +876,9 @@ function renderHostTasks() {
           </p>
           <h3>${esc(t.title)}</h3>
           ${t.description ? `<p>${escMultiline(t.description)}</p>` : ''}
-          <p class="hint">${icon(I.hint, { lead: true })}Hint ved godkjenning: ${esc(t.hint_text || '—')}
+          <p class="hint">${icon(I.hint, { lead: true })}Hint: ${esc(t.hint_text || '—')}
             (${t.hint_audience === 'all_loyal' ? 'alle Lojale' : 'kun denne spilleren'})</p>
+          ${renderTaskTrigger(t)}
           ${t.status === 'claimed' ? `
             <div class="btn-row">
               <button data-decide-task="${esc(t.id)}" data-approve="true">${icon(I.ok, { lead: true })}Godkjenn</button>
@@ -808,8 +895,11 @@ function renderHostTasks() {
       <details class="editor" data-panel="new-task">
         <summary>${icon(I.add, { lead: true })}Ny oppgave</summary>
         <form data-hold id="new-task-form">
-          <label>Lojal
-            <select name="participant_id">${loyals.map((p) => `<option value="${esc(p.id)}">${esc(p.display_name)}</option>`).join('')}</select>
+          <label>Til
+            <select name="participant_id">
+              <option value="">🎲 Tilfeldig Lojal</option>
+              ${loyals.map((p) => `<option value="${esc(p.id)}">${esc(p.display_name)}</option>`).join('')}
+            </select>
           </label>
           <label>Tittel <input name="title" maxlength="160" required placeholder="F.eks. «Få gruppa til å le uten å forklare hvorfor»" /></label>
           <label>Beskrivelse (valgfritt) <textarea name="description"></textarea></label>
@@ -820,6 +910,16 @@ function renderHostTasks() {
               <option value="all_loyal">Alle Lojale</option>
             </select>
           </label>
+          <label>Utløses av et sabotørmål (valgfritt)
+            <select name="trigger_objective_id">
+              <option value="">Ingen — hintet slippes når du godkjenner oppgaven</option>
+              ${objectives.map((o) => `
+                <option value="${esc(o.id)}">${o.status === 'approved' ? '✓ ' : ''}${esc(o.title)}</option>`).join('')}
+            </select>
+          </label>
+          <p class="hint">Kobler du hintet til et mål, blir det et <strong>direkte hint</strong>:
+          det slippes først når den sabotasjen faktisk har skjedd og du har godkjent den.
+          ✓ betyr at målet allerede er godkjent.</p>
           <button>${icon(I.add, { lead: true })}Legg til oppgave</button>
         </form>
       </details>`
@@ -881,7 +981,8 @@ function renderPlayer() {
       <p>${esc(saboteurPhase(b.phase).player)}</p>
     </div>
 
-    ${renderPlayerAnnouncements(b)}`]
+    ${renderPlayerAnnouncements(b)}
+    ${renderPlayerIntro(b)}`]
 
   // The PIN is what gets a guest back in if they clear their browser or tap
   // "forlat" by mistake, so it's shown prominently while they're waiting and
@@ -979,6 +1080,20 @@ function renderPlayer() {
     </footer>`)
 
   return parts.join('')
+}
+
+// The rules of engagement. Open by default while people are still waiting to
+// start (that's when they need to read it), folded away once play is under way
+// so it doesn't push the role card down the screen.
+function renderPlayerIntro(b) {
+  const intro = (b.intro || '').trim()
+  if (!intro) return ''
+  const openWhileWaiting = b.status === 'draft' ? ' open' : ''
+  return `
+    <details class="editor" data-panel="intro"${openWhileWaiting}>
+      <summary>${icon(I.briefing, { lead: true })}Slik fungerer Skjult agenda</summary>
+      <div class="card"><p>${escMultiline(intro)}</p></div>
+    </details>`
 }
 
 // Host announcements — shown to every participant regardless of role.
@@ -1145,11 +1260,26 @@ function wireEvents() {
     hostAction('host_auto_assign_roles', { p_saboteur_count: count }, 'Roller delt ut')
   })
 
+  bind('#intro-form', 'submit', (e) => {
+    e.preventDefault()
+    hostAction('host_set_saboteur_intro', { p_intro: e.target.elements.intro.value }, 'Introduksjon lagret')
+  })
+
+  bind('#library-form', 'submit', (e) => {
+    e.preventDefault()
+    const f = e.target.elements
+    // Empty select value -> null -> the database draws at random.
+    hostAction('host_add_objective_from_library', {
+      p_library_id: f.library_id.value || null,
+      p_participant_id: f.participant_id.value || null,
+    }, 'Mål lagt til')
+  })
+
   bind('#new-objective-form', 'submit', (e) => {
     e.preventDefault()
     const f = e.target.elements
     hostAction('host_upsert_objective', {
-      p_participant_id: f.participant_id.value,
+      p_participant_id: f.participant_id.value || null, // null = random Sabotør
       p_title: f.title.value,
       p_description: f.description.value,
       p_points: Number(f.points.value) || 0,
@@ -1168,13 +1298,19 @@ function wireEvents() {
     e.preventDefault()
     const f = e.target.elements
     hostAction('host_upsert_task', {
-      p_participant_id: f.participant_id.value,
+      p_participant_id: f.participant_id.value || null, // null = random Lojal
       p_title: f.title.value,
       p_description: f.description.value,
       p_hint_text: f.hint_text.value,
       p_hint_audience: f.hint_audience.value,
+      p_trigger_objective_id: f.trigger_objective_id?.value || null,
     }, 'Oppgave lagt til')
   })
+  app.querySelectorAll('[data-clear-trigger]').forEach((btn) =>
+    btn.addEventListener('click', () =>
+      hostAction('host_clear_task_trigger', { p_task_id: btn.dataset.clearTrigger }, 'Kobling fjernet')
+    )
+  )
   app.querySelectorAll('[data-decide-task]').forEach((btn) =>
     btn.addEventListener('click', () => {
       const approve = btn.dataset.approve === 'true'
