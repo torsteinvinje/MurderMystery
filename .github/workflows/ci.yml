@@ -1,0 +1,56 @@
+# Runs the test suite and a production build on every pull request and on
+# pushes to main.
+#
+# Why this exists: the tests were only ever run by hand, so a regression could
+# reach main unnoticed. Netlify builds on push, but it does NOT run tests —
+# a green deploy has never meant a passing suite.
+#
+# Deliberately mirrors production: Node 22, the same version netlify.toml pins.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        # The integration suite self-skips without SUPABASE_TEST_URL, which is
+        # correct here: CI has no disposable database, and it must never point
+        # at production. The static suites still run in full.
+        run: npm test
+
+      - name: Production build
+        # Builds with the Skjult agenda flag OFF, matching the default. The
+        # build fails loudly if an entry point or import is broken.
+        run: npm run build
+        env:
+          # Dummy values: the build only needs these to exist, and no network
+          # call is made during it. Real values live in Netlify.
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+
+      - name: Check the canonical schema is in sync with migrations
+        # supabase-schema.sql is generated from supabase/migrations/. If someone
+        # edits one without regenerating, a fresh install would differ from an
+        # upgraded one — the kind of drift that is invisible until it bites.
+        run: |
+          npm run schema:build
+          if ! git diff --quiet -- supabase-schema.sql; then
+            echo "::error::supabase-schema.sql is out of date. Run 'npm run schema:build' and commit the result."
+            git diff --stat -- supabase-schema.sql
+            exit 1
+          fi

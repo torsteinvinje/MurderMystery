@@ -29,6 +29,10 @@ const state = {
   suspicions: new Map(), // suspect_id -> level (0–3)
   reveal: null,
   secretShown: false,
+  // Set when a background refresh fails. Guests are on party wifi, often in a
+  // basement — silently showing stale content is worse than saying so, because
+  // the whole game depends on the phone being current.
+  stale: false,
 }
 
 let stopWatching = null
@@ -60,7 +64,14 @@ function startWatching() {
   if (stopWatching) stopWatching()
   const gameId = state.me?.game?.id
   if (!gameId) return
-  stopWatching = watchGame(gameId, () => refresh().catch(() => {}))
+  stopWatching = watchGame(gameId, () =>
+    refresh().catch(() => {
+      // Don't tear the screen down — the data on it is still the last good
+      // state. Just flag it, and let the next successful refresh clear it.
+      state.stale = true
+      render()
+    })
+  )
 }
 
 // Re-fetch everything through the RPCs. Cheap at party scale, and it means
@@ -80,6 +91,7 @@ async function refresh() {
   state.suspects = suspects
   state.polaroids = polaroids
   state.suspicions = new Map(mySuspicions.map((s) => [s.suspect_id, s.level]))
+  state.stale = false // we just got fresh data
 
   // Only ask for the solution once the host has opened the vault; before
   // that the database refuses (and must keep refusing).
@@ -213,6 +225,14 @@ function renderGame() {
       <h1>${esc(game.title)}</h1>
       <span class="badge${game.status === 'revealed' ? ' red' : ''}">${esc(phaseLabel(game.phase))}</span>
     </header>`)
+
+  if (state.stale) {
+    parts.push(`
+      <p class="error" role="status">
+        ${icon(I.warn, { lead: true })}Mistet kontakten med spillet — dette kan være
+        gammel informasjon. Sjekk nettet; siden oppdaterer seg selv når den er tilbake.
+      </p>`)
+  }
 
   // What the guest should be doing right now.
   parts.push(`

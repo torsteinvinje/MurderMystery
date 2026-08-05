@@ -1,0 +1,27 @@
+# Force LF in the working tree for source files, on every platform.
+#
+# Why: without this, git on Windows checks these out with CRLF. Several tests
+# assert against the literal text of the SQL migrations, and a pattern written
+# as `;\n` silently stops matching `;\r\n` — so the same commit could pass on
+# Windows and fail in CI (or the reverse) for reasons nothing to do with the
+# code. It cost a confusing debugging round; this ends the class of problem.
+#
+# Binary assets are marked so git never tries to "fix" their line endings.
+
+* text=auto eol=lf
+
+*.sql   text eol=lf
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.json  text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.toml  text eol=lf
+
+*.webp  binary
+*.woff2 binary
+*.png   binary
+*.jpg   binary
+*.zip   binary
