@@ -5,7 +5,11 @@
 // Icons are referenced by SEMANTIC name via the `I` map below — so if we ever
 // want a different glyph for "evidence", we change it in one place, not in
 // twelve template strings. Render with icon(I.evidence).
-import '@phosphor-icons/web/regular'
+// Generated subset — only the icons in the `I` map below, woff2 only.
+// Regenerate with `npm run icons:build` after adding an icon here.
+// (Importing @phosphor-icons/web/regular instead would ship 1530 unused rules
+// and three unused copies of the font.)
+import '../styles/icons.css'
 
 // Semantic role -> Phosphor icon name. Keep the domains visually distinct:
 //   people/guests ....... users

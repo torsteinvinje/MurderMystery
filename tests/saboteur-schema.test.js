@@ -12,7 +12,12 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const read = (p) => readFileSync(join(root, p), 'utf8')
+// Normalise line endings before matching. Git can check these files out as
+// CRLF on Windows, and the patterns below are written against \n — without
+// this the same commit passes locally and fails in CI, or vice versa, for
+// reasons that have nothing to do with the code. (.gitattributes now pins LF
+// too; this is the belt to that pair of braces.)
+const read = (p) => readFileSync(join(root, p), 'utf8').replace(/\r\n/g, '\n')
 
 const migration = read('supabase/migrations/00011_saboteur_standalone.sql')
 const migrationDown = read('supabase/migrations/00011_saboteur_standalone_down.sql')
@@ -452,12 +457,15 @@ describe('Skjult agenda migration — security invariants', () => {
     expect(schemaFile).toMatch(/SABOTEUR_GAME_ENABLED/)
     expect(schemaFile).toMatch(/create or replace function create_saboteur_game\(/i)
     expect(schemaFile).toMatch(/create or replace function join_saboteur_game\(/i)
-    // The old party-bound functions must no longer be CREATED. They may still
-    // appear in `drop function if exists` cleanup lines — that is deliberate,
-    // so re-running the canonical file upgrades a database that had the old
-    // shape installed.
-    expect(schemaFile).not.toMatch(/create or replace function get_my_saboteur_game_id/i)
-    expect(schemaFile).not.toMatch(/create or replace function host_list_eligible_participants/i)
-    expect(schemaFile).toMatch(/drop function if exists get_my_saboteur_game_id/i)
+    // The canonical file is now the migrations replayed in order, so the old
+    // party-bound functions DO appear — created by 00009/00010 and then
+    // dropped by 00011. What matters is that the drop comes last, leaving
+    // them absent from the final state.
+    for (const fn of ['get_my_saboteur_game_id', 'host_list_eligible_participants']) {
+      const created = schemaFile.lastIndexOf(`create or replace function ${fn}`)
+      const dropped = schemaFile.lastIndexOf(`drop function if exists ${fn}`)
+      expect(dropped, `${fn} should be dropped somewhere`).toBeGreaterThan(-1)
+      expect(dropped, `${fn} must be dropped AFTER its last creation`).toBeGreaterThan(created)
+    }
   })
 })

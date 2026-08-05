@@ -16,9 +16,34 @@
   status = 301
   force = true
 
-# Baseline secure headers. These are safe for the current app; a full
-# Content-Security-Policy is deferred to the auth phase, where it must be
-# tested against the live Supabase REST + Realtime (wss) connections.
+# Security headers.
+#
+# The Content-Security-Policy ships in REPORT-ONLY mode deliberately. It cannot
+# be verified in CI — it depends on the live Supabase REST and Realtime (wss)
+# endpoints, which no test here talks to — and a wrong CSP breaks the site for
+# a party mid-game. Report-Only logs violations to the browser console and
+# blocks nothing.
+#
+# TO ENFORCE IT (do this once you've checked a deploy preview):
+#   1. Open every page on a deploy preview: /, /host.html, /studio.html,
+#      /konto.html, /skjult-agenda.html. Create a party, join it, reveal
+#      evidence — that exercises REST, Realtime and image loading.
+#   2. Watch DevTools → Console for "Content Security Policy" reports.
+#   3. If there are none, rename the header below:
+#        Content-Security-Policy-Report-Only  ->  Content-Security-Policy
+#
+# Why each directive is what it is:
+#   script-src 'self'        — every script is a bundled module file; there is
+#                              no inline script, so no 'unsafe-inline' needed.
+#   style-src  'unsafe-inline' — the views build HTML strings containing
+#                              style="..." attributes (~30 of them). Removing
+#                              those is the only way to drop this, and inline
+#                              style is far less dangerous than inline script.
+#   img-src    https:        — hosts can paste any https image URL for evidence
+#                              photos; data: covers the emoji favicons.
+#   connect-src *.supabase.co — the project URL is a build-time env var, so it
+#                              cannot be hardcoded here. wss: is Realtime.
+#   frame-ancestors 'none'   — same intent as X-Frame-Options, modern form.
 [[headers]]
   for = "/*"
   [headers.values]
@@ -26,3 +51,4 @@
     X-Frame-Options = "DENY"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "geolocation=(), camera=(), microphone=()"
+    Content-Security-Policy-Report-Only = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"

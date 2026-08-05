@@ -1,9 +1,150 @@
--- ============================================================================
--- MURDERMYSTERY — komplett databaseskjema
+-- ==========================================================================
+-- MURDERMYSTERY — KOMPLETT DATABASESKJEMA
 --
--- Kjør hele denne fila i Supabase SQL Editor (den kan trygt kjøres på nytt,
--- og oppgraderer også en database som kjørte en eldre versjon av fila).
--- Historikken ligger som supabase/migrations/00001_init.sql + 00002_mysteries.sql.
+-- ⚠️  GENERERT FIL — IKKE REDIGER DIREKTE.
+--     Lag en ny migrasjon i supabase/migrations/ og kjør: npm run schema:build
+--     (CI feiler hvis denne fila ikke er i takt med migrasjonene.)
+--
+-- HVA DETTE ER
+--   Alle migrasjonene i supabase/migrations/ satt sammen i rekkefølge —
+--   nøyaktig det en oppdatert database har fått kjørt. Kjør hele fila på en
+--   fersk database, så får du samme resultat som en som har fulgt
+--   migrasjonene fra dag én.
+--
+-- HVORDAN LESE DEN
+--   Fila kjøres ovenfra og ned, og SENERE definisjoner av samme funksjon
+--   ERSTATTER tidligere. Noen funksjoner står derfor flere ganger; det er
+--   migrasjonshistorikken, ikke en feil. Indeksen under sier hvilken fil den
+--   gjeldende versjonen av hver funksjon kommer fra.
+--
+-- SIKKERHETSMODELLEN (kortversjonen)
+--   • RLS er PÅ for alle tabeller, UTEN policies. Klienten når aldri en
+--     tabell direkte.
+--   • All tilgang går via SECURITY DEFINER-funksjoner som validerer et
+--     hemmelig token og returnerer kun det den kalleren har krav på.
+--   • Morderen (is_killer) og oppklaringen (resolution) forlater aldri
+--     databasen til en spiller før verten har avslørt — eneste vei ut er
+--     get_reveal, som krever spillstatus 'revealed'.
+--
+-- Generert fra 20 migrasjoner: 00001_init.sql … 00020_migration_tracking.sql
+-- ==========================================================================
+--
+-- INDEKS — gjeldende definisjon av hver funksjon:
+--
+-- OFFENTLIGE (kallbare via RPC):
+--   cast_saboteur_ballot                   00011_saboteur_standalone.sql
+--   claim_saboteur_objective               00011_saboteur_standalone.sql
+--   claim_saboteur_task                    00011_saboteur_standalone.sql
+--   create_game                            00007_runbooks.sql
+--   create_mystery                         00007_runbooks.sql
+--   create_saboteur_game                   00011_saboteur_standalone.sql
+--   get_my_player                          00001_init.sql
+--   get_my_profile                         00005_profile_names.sql
+--   get_my_saboteur_brief                  00019_task_and_hint_libraries.sql
+--   get_my_saboteur_game_id                00010_saboteur_discovery.sql
+--   get_my_saboteur_vote_status            00011_saboteur_standalone.sql
+--   get_my_suspicions                      00001_init.sql
+--   get_public_polaroids                   00001_init.sql
+--   get_public_suspects                    00001_init.sql
+--   get_reveal                             00001_init.sql
+--   get_saboteur_ballot_targets            00011_saboteur_standalone.sql
+--   handle_new_user                        00005_profile_names.sql
+--   host_add_evidence                      00004_evidence.sql
+--   host_add_objective_from_library        00016_saboteur_intro_library.sql
+--   host_add_task_from_library             00019_task_and_hint_libraries.sql
+--   host_archive_saboteur_game             00011_saboteur_standalone.sql
+--   host_assign_suspect                    00001_init.sql
+--   host_auto_assign                       00001_init.sql
+--   host_auto_assign_roles                 00011_saboteur_standalone.sql
+--   host_clear_task_trigger                00017_hint_trigger.sql
+--   host_close_voting_round                00011_saboteur_standalone.sql
+--   host_create_saboteur_game              00009_saboteur_game.sql
+--   host_decide_objective_claim            00017_hint_trigger.sql
+--   host_decide_task_claim                 00017_hint_trigger.sql
+--   host_delete_announcement               00013_saboteur_pins_phases.sql
+--   host_delete_evidence                   00004_evidence.sql
+--   host_delete_objective                  00018_delete_objectives_tasks.sql
+--   host_delete_polaroid                   00001_init.sql
+--   host_delete_task                       00018_delete_objectives_tasks.sql
+--   host_end_saboteur_game                 00011_saboteur_standalone.sql
+--   host_get_game                          00007_runbooks.sql
+--   host_get_polaroids                     00001_init.sql
+--   host_get_saboteur_audit                00011_saboteur_standalone.sql
+--   host_get_saboteur_game                 00017_hint_trigger.sql
+--   host_get_suspects                      00001_init.sql
+--   host_get_suspicions                    00001_init.sql
+--   host_list_eligible_participants        00009_saboteur_game.sql
+--   host_list_evidence                     00004_evidence.sql
+--   host_list_players                      00001_init.sql
+--   host_list_saboteur_hint_library        00019_task_and_hint_libraries.sql
+--   host_open_voting_round                 00011_saboteur_standalone.sql
+--   host_publish_announcement              00013_saboteur_pins_phases.sql
+--   host_remove_participant                00011_saboteur_standalone.sql
+--   host_reveal_polaroid                   00001_init.sql
+--   host_reveal_voting_round               00011_saboteur_standalone.sql
+--   host_set_announcement_published        00015_announcement_drafts.sql
+--   host_set_know_each_other               00011_saboteur_standalone.sql
+--   host_set_participant_active            00011_saboteur_standalone.sql
+--   host_set_participant_role              00011_saboteur_standalone.sql
+--   host_set_participants                  00009_saboteur_game.sql
+--   host_set_phase                         00001_init.sql
+--   host_set_saboteur_intro                00016_saboteur_intro_library.sql
+--   host_set_saboteur_phase                00013_saboteur_pins_phases.sql
+--   host_set_saboteur_status               00011_saboteur_standalone.sql
+--   host_set_show_leaderboard              00011_saboteur_standalone.sql
+--   host_set_status                        00001_init.sql
+--   host_update_suspect                    00001_init.sql
+--   host_upsert_announcement               00015_announcement_drafts.sql
+--   host_upsert_objective                  00016_saboteur_intro_library.sql
+--   host_upsert_polaroid                   00001_init.sql
+--   host_upsert_task                       00017_hint_trigger.sql
+--   join_game                              00014_unique_player_names.sql
+--   join_saboteur_game                     00013_saboteur_pins_phases.sql
+--   list_mysteries                         00002_mysteries.sql
+--   list_saboteur_objective_library        00016_saboteur_intro_library.sql
+--   list_saboteur_task_library             00019_task_and_hint_libraries.sql
+--   missing_migrations                     00020_migration_tracking.sql
+--   owner_claim_saboteur_game              00012_saboteur_account.sql
+--   owner_delete_mystery                   00002_mysteries.sql
+--   owner_delete_polaroid                  00002_mysteries.sql
+--   owner_delete_suspect                   00002_mysteries.sql
+--   owner_get_mystery                      00007_runbooks.sql
+--   owner_list_saboteur_games              00012_saboteur_account.sql
+--   owner_set_killer                       00002_mysteries.sql
+--   owner_update_mystery                   00007_runbooks.sql
+--   owner_upsert_polaroid                  00002_mysteries.sql
+--   owner_upsert_suspect                   00002_mysteries.sql
+--   record_migration                       00020_migration_tracking.sql
+--   rejoin_saboteur_game                   00013_saboteur_pins_phases.sql
+--   set_suspicion                          00001_init.sql
+--   update_my_profile                      00005_profile_names.sql
+--
+-- INTERNE (execute trukket tilbake fra anon/authenticated):
+--   _host_game                             00001_init.sql
+--   _owner_mystery                         00002_mysteries.sql
+--   _player                                00001_init.sql
+--   _poke                                  00001_init.sql
+--   _saboteur_apply_transition             00011_saboteur_standalone.sql
+--   _saboteur_audit                        00011_saboteur_standalone.sql
+--   _saboteur_enabled                      00011_saboteur_standalone.sql
+--   _saboteur_game_for_host                00009_saboteur_game.sql
+--   _saboteur_host                         00011_saboteur_standalone.sql
+--   _saboteur_me                           00011_saboteur_standalone.sql
+--   _saboteur_participant_for_player       00009_saboteur_game.sql
+--   _saboteur_random_participant           00016_saboteur_intro_library.sql
+--   _saboteur_release_hint                 00019_task_and_hint_libraries.sql
+--
+-- ==========================================================================
+
+-- ==========================================================================
+-- ▼ 00001_init.sql
+-- ==========================================================================
+
+-- ============================================================================
+-- LJÅMORDET PÅ GRILLFESTEN — komplett databaseskjema
+--
+-- Kjør hele denne fila i Supabase SQL Editor (den kan trygt kjøres på nytt).
+-- Samme innhold ligger som supabase/migrations/00001_init.sql.
 --
 -- Sikkerhetsmodell (viktig å forstå før du endrer noe):
 --   1. RLS er PÅ for alle tabeller, uten policies for direkte lesing/skriving.
@@ -17,10 +158,6 @@
 --   4. game_events er en ufarlig "noe har skjedd"-strøm som Realtime lytter
 --      på. Den inneholder aldri spillinnhold — klienten henter alt på nytt
 --      via RPC-ene når den får et dytt.
---   5. Mysteriekatalogen (mysteries + mystery_suspects + mystery_polaroids)
---      er maler. Hvert spill KOPIERER innholdet ved opprettelse. Forfattere
---      redigerer med hemmelig owner_token; katalog-RPC-en list_mysteries
---      røper aldri morder, hemmeligheter eller løsning.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -96,65 +233,29 @@ create table if not exists game_events (
 
 create index if not exists game_events_game_idx on game_events (game_id, id);
 
--- Mysterie-katalogen: maler som hvert spill kopierer innholdet sitt fra.
--- Forfattere identifiseres med en hemmelig owner_token (samme mønster som
--- host_token/player_token). resolution og is_killer er like beskyttet her
--- som i spillene — de nås kun via owner_*-RPC-ene.
-create table if not exists mysteries (
-  id          uuid primary key default gen_random_uuid(),
-  owner_token uuid not null default gen_random_uuid(), -- hemmelig forfatternøkkel
-  is_builtin  boolean not null default false,
-  title       text not null,
-  intro       text not null default '',
-  resolution  text not null default '',                -- BESKYTTET
-  runbook     text not null default '',                -- BESKYTTET: regi/rekvisitter, kun vert/forfatter
-  created_at  timestamptz not null default now()
+-- Maler: innholdet et nytt spill kopieres fra (create_game).
+create table if not exists story_template (
+  id         int primary key check (id = 1),
+  title      text not null,
+  intro      text not null,
+  resolution text not null
 );
-alter table mysteries add column if not exists runbook text not null default '';
 
-create table if not exists mystery_suspects (
-  id          uuid primary key default gen_random_uuid(),
-  mystery_id  uuid not null references mysteries (id) on delete cascade,
-  sort_order  int  not null default 0,
+create table if not exists suspect_templates (
+  sort_order  int primary key,
   name        text not null,
-  tagline     text not null default '',
-  public_info text not null default '',
-  secret      text not null default '',
-  alibi       text not null default '',
-  is_killer   boolean not null default false,          -- BESKYTTET
-  created_at  timestamptz not null default now()
+  tagline     text not null,
+  public_info text not null,
+  secret      text not null,
+  alibi       text not null,
+  is_killer   boolean not null default false
 );
 
-create table if not exists mystery_polaroids (
-  id         uuid primary key default gen_random_uuid(),
-  mystery_id uuid not null references mysteries (id) on delete cascade,
-  sort_order int  not null default 0,
-  title      text not null default '',
-  caption    text not null default '',
-  image_url  text,
-  created_at timestamptz not null default now()
+create table if not exists polaroid_templates (
+  sort_order int primary key,
+  title      text not null,
+  caption    text not null
 );
-
--- Spillet husker hvilket mysterium det ble laget fra (innholdet er likevel
--- kopiert inn i spillet, så et slettet mysterium ødelegger ingen fest).
-alter table games add column if not exists
-  mystery_id uuid references mysteries (id) on delete set null;
-
--- Kjøreplanen (regi/rekvisitter) kopieres inn i spillet ved opprettelse.
--- BESKYTTET: inneholder løsningen, går kun ut via host_get_game.
-alter table games add column if not exists runbook text not null default '';
-
--- Eierskap: når en INNLOGGET vert lager noe, knyttes det til kontoen (nullbart,
--- så anonyme verter fungerer som før). Se seksjon 11 (auth) nederst.
-alter table games     add column if not exists owner_id uuid references auth.users (id) on delete set null;
-alter table mysteries add column if not exists owner_id uuid references auth.users (id) on delete set null;
-create index if not exists games_owner_idx     on games (owner_id);
-create index if not exists mysteries_owner_idx on mysteries (owner_id);
-
--- Gamle mal-tabeller fra første versjon av skjemaet (erstattet av mysteries).
-drop table if exists suspect_templates;
-drop table if exists polaroid_templates;
-drop table if exists story_template;
 
 -- ----------------------------------------------------------------------------
 -- 2) RLS OG RETTIGHETER
@@ -166,9 +267,9 @@ alter table players           enable row level security;
 alter table polaroids         enable row level security;
 alter table suspicions        enable row level security;
 alter table game_events       enable row level security;
-alter table mysteries         enable row level security;
-alter table mystery_suspects  enable row level security;
-alter table mystery_polaroids enable row level security;
+alter table story_template    enable row level security;
+alter table suspect_templates enable row level security;
+alter table polaroid_templates enable row level security;
 
 -- Ingen policies = ingen direkte tilgang for klienter. Eneste unntak er
 -- game_events, som Realtime trenger å kunne lese (den er ufarlig).
@@ -204,302 +305,74 @@ begin
 end $$;
 
 -- ----------------------------------------------------------------------------
--- 3) SEED: det innebygde mysteriet «Ljåmordet på grillfesten»
+-- 3) SEED-INNHOLD (malene et nytt spill kopieres fra)
 -- ----------------------------------------------------------------------------
 
-do $$
-declare
-  v_id uuid;
-begin
-  if exists (select 1 from mysteries where is_builtin) then
-    return; -- allerede lagt inn
-  end if;
-
-  insert into mysteries (is_builtin, title, intro, resolution) values (
-  true,
+delete from story_template;
+insert into story_template (id, title, intro, resolution) values (
+  1,
   'Ljåmordet på grillfesten',
   'Sommerkvelden på Vollan gård begynte med grillos, rabarbrasaft og gjensynsglede — og endte med et lik. Klokka halv ti fant grillmesteren verten selv, Odd Gunnar Vollan (61), bak redskapsskjulet. Ved siden av ham: gårdens gamle ljå. Grinden til tunet har vært lukket hele kvelden. Ingen har kommet, og ingen har gått. Morderen står fortsatt her — med saftglass i hånda. Lensmannen har tatt saken, og ingen forlater festen før den er løst.',
   'Det var Randi Espeland, banksjefen. I årevis hadde hun dekket egne tap ved å «låne» fra kundenes kontoer — og forfalsket Odd Gunnars signatur på lånepapirene til det nye fjøset. Dagen før festen oppdaget Odd Gunnar det, og ga henne frist til mandag: meld deg selv, ellers ringer jeg Økokrim. Under festen ba han henne møte seg bak redskapsskjulet for å gi henne en siste sjanse. Hun tok med lånepapirene for å brenne dem på grillen — og da han snudde ryggen til, grep hun ljåen fra skjulveggen. Alibiet hennes sprakk med ett eneste gjestebilde: klokka 21.12 var kjøkkenet tomt og kaffetrakteren kald. Smalt støvelavtrykk i størrelse 38. Brente lånepapirer med falsk signatur i grillen. Og i notatboka til Odd Gunnar: «RE: frist mandag». RE. Randi Espeland. Sak avsluttet.'
-  ) returning id into v_id;
+);
 
-  insert into mystery_suspects (mystery_id, sort_order, name, tagline, public_info, secret, alibi, is_killer) values
-  (v_id, 1, 'Solveig Vollan', 'Kona på gården',
+delete from suspect_templates;
+insert into suspect_templates (sort_order, name, tagline, public_info, secret, alibi, is_killer) values
+(1, 'Solveig Vollan', 'Kona på gården',
  'Gift med Odd Gunnar i 34 år. Sto for potetsalaten og smilte til alle hele kvelden — kanskje litt for bredt.',
  'Du fant skilsmissepapirer i skrivebordet til Odd Gunnar forrige uke. Han skulle forlate deg — og ta gården med seg. Du har ikke fortalt det til noen, og du nekter å la noen få vite at ekteskapet var en fasade.',
  'Jeg sto ved langbordet og skjenket rabarbrasaft fra halv ni til kvart på ti. Spør hvem som helst — glassene var aldri tomme.',
  false),
-  (v_id, 2, 'Linn Vollan', 'Datteren som kom hjem',
+(2, 'Linn Vollan', 'Datteren som kom hjem',
  'Flyttet til Oslo for åtte år siden. Dukket uventet opp på festen — første gang på gården siden jul.',
  'Du skylder 340 000 kroner etter nettpoker. Du kom hjem for å be far om forskudd på arven. Han sa nei — høylytt — bak låven klokka kvart på ni. Flere kan ha hørt dere.',
  'Jeg satt på trappa og røykte og så på solnedgangen. Alene, dessverre. Men jeg hørte musikken hele tiden.',
  false),
-  (v_id, 3, 'Birger Brakstad', 'Naboen med grensetvisten',
+(3, 'Birger Brakstad', 'Naboen med grensetvisten',
  'Grunneier på nabogården. Har kranglet med Odd Gunnar om et jorde i tolv år. Kom likevel i år — med hjemmelaget bringebærsaft som fredsgave.',
  'Grensesaken skulle opp i jordskifteretten neste måned, og advokaten din sa rett ut at du kom til å tape alt. Med Odd Gunnar borte stopper hele saken. Du klarer ikke å slutte å tenke på det.',
  'Jeg var borte ved vedstabelen og hentet mer ved til bålpanna. Det tar tid å finne tørr bjørk, vet du.',
  false),
-  (v_id, 4, 'Kjell-Arne Mo', 'Gårdsarbeideren',
+(4, 'Kjell-Arne Mo', 'Gårdsarbeideren',
  'Har jobbet på Vollan gård i ni år. Kjenner hver krok av gården — og vet hvor alt verktøyet henger.',
  'Odd Gunnar ga deg sparken samme morgen. «Effektivisering», sa han. Du har ikke sagt det til noen — kona di tror fortsatt alt er som før. Du var rasende hele dagen.',
  'Jeg grillet maiskolber på den lille grillen på baksiden. Der er det bare meg, som vanlig. Ingen ser gårdsarbeideren før maten er klar.',
  false),
-  (v_id, 5, 'Randi Espeland', 'Banksjefen',
+(5, 'Randi Espeland', 'Banksjefen',
  'Banksjef i bygda i femten år. Ordnet lånet da Vollan bygde nytt fjøs. Alltid pen i tøyet, alltid først til å skåle.',
  'Du har «lånt» av kundenes kontoer for å dekke egne tap — og forfalsket Odd Gunnars signatur på lånepapirer. I går oppdaget han det og ga deg frist til mandag med å melde deg selv. Du MÅ få tak i papirene han sitter på, og ingen kan få vite om fristen.',
  'Jeg var på kjøkkenet, satte på kaffetrakteren og ordnet kransekaka. Kjøkkenvinduet vender jo rett mot tunet — jeg så dere alle sammen.',
  true),
-  (v_id, 6, 'Petter «Pjokken» Hauge', 'Grillmesteren',
+(6, 'Petter «Pjokken» Hauge', 'Grillmesteren',
  'Bygdas selvutnevnte grillkonge. Var sammen med Linn på videregående og har aldri helt kommet over det. Det var han som fant Odd Gunnar.',
  'Du så en skikkelse i mørke klær gå mot redskapsskjulet rundt klokka ni. Du tør ikke si det høyt — for da må du innrømme hvor du selv sto: bak låven, der du øvde deg på å be Linn ut igjen.',
  'Grillen, selvfølgelig! En grillmester forlater aldri grillen. Bortsett fra da jeg hentet mer marinade. To minutter, maks. Kanskje fem.',
  false),
-  (v_id, 7, 'Ingrid Sæter', 'Veterinæren',
+(7, 'Ingrid Sæter', 'Veterinæren',
  'Bygdas veterinær. Var på gården så sent som i forrige uke for å se til en halt hoppe.',
  'Rapporten din fra forrige uke skjuler noe: du fant tegn på vanskjøtsel i fjøset, men Odd Gunnar betalte deg for å «runde av» formuleringene. Kommer det ut, mister du lisensen. Du håper inderlig ingen ber om å få se rapporten.',
  'Jeg var nede ved hestehagen og så til hoppa. Dyr merker uro lenge før mennesker, vet du. Hun var rastløs hele kvelden.',
  false),
-  (v_id, 8, 'Tormod Lien', 'Den pensjonerte lensmannen',
+(8, 'Tormod Lien', 'Den pensjonerte lensmannen',
  'Bygdas lensmann i tretti år, nå pensjonist. Glemmer aldri et ansikt. Odd Gunnars gamle jaktkamerat.',
  'For tjue år siden henla du en sak mot Odd Gunnar om forsikringssvindel — mot at han holdt munn om fyllekjøringen din. Han har «mint deg på det» hver eneste jul siden. Du kom på festen for å be ham slette gjelda en gang for alle.',
  'Jeg satt i fluktstolen ved bålpanna hele kvelden. Gamle knær, unge øyne. Jeg så alt — trodde jeg.',
  false);
 
-  insert into mystery_polaroids (mystery_id, sort_order, title, caption) values
-  (v_id, 1, 'Ljåen',
+delete from polaroid_templates;
+insert into polaroid_templates (sort_order, title, caption) values
+(1, 'Ljåen',
  'Gårdens gamle ljå, funnet ved siden av Odd Gunnar. Skaftet er tørket omhyggelig rent — med en serviett fra festen. Morderen tenkte klart nok til å fjerne spor.'),
-  (v_id, 2, 'Fotavtrykk bak skjulet',
+(2, 'Fotavtrykk bak skjulet',
  'Et smalt støvelavtrykk i den myke jorda bak redskapsskjulet. Størrelse 38, med fin hæl. Dette er ingen arbeidsstøvel.'),
-  (v_id, 3, 'Notatboka til Odd Gunnar',
+(3, 'Notatboka til Odd Gunnar',
  'Siste side i notatboka, skrevet med hardt pennetrykk: «RE: frist mandag. Ellers ringer jeg Økokrim.»'),
-  (v_id, 4, 'Kjøkkenvinduet kl. 21.12',
+(4, 'Kjøkkenvinduet kl. 21.12',
  'Et gjestebilde tatt mot tunet klokka 21.12. I bakgrunnen ses kjøkkenvinduet tydelig. Kjøkkenet er tomt — og kaffetrakteren står ikke på.'),
-  (v_id, 5, 'Grillen',
+(5, 'Grillen',
  'Noen har brent papirer i grillen etter at maten var ferdig. Ett hjørne overlevde flammene: «...esignatur: Odd Gunnar Voll...» — men håndskriften er ikke hans.'),
-  (v_id, 6, 'Veska i gangen',
-   'En åpen veske i gangen. Opp av lomma stikker det som ser ut som skilsmissepapirer — med Solveig Vollans navn på.');
-end $$;
-
--- Innebygd mysterium 2: «Giftmordet på julebordet» (fysisk opplegg i runbooks/).
-do $$
-declare
-  v_id uuid;
-begin
-  if exists (select 1 from mysteries where is_builtin and title = 'Giftmordet på julebordet') then
-    return;
-  end if;
-
-  insert into mysteries (is_builtin, title, intro, resolution) values (
-    true,
-    'Giftmordet på julebordet',
-    'Julebordet til Solli & Sønner Rørleggerservice var i full gang med pinnekjøtt, firmaquiz og akevitt da grunnleggeren selv, Arvid Solli (68), reiste seg for å holde sin berømte tale. I år skulle han endelig kunngjøre hvem som tar over firmaet. Han rakk aldri så langt. Midt i skålen tok han seg til halsen, veltet glasset og segnet om over langbordet. Glasset luktet bittert. Ingen utenfra har vært i lokalet i kveld — den som forgiftet Arvid, sitter fortsatt til bords. Og julebordet? Det fortsetter som planlagt. Morderen skal ingen steder.',
-    'Det var Camilla Solli-Berg, datteren og økonomisjefen. I to år hadde hun dekket skjulte lån med penger fra firmakontoen, og på nyåret ventet full gjennomgang hos revisor — bestilt av faren selv. Camilla visste det alle i familien visste: Arvid rørte aldri felleskaraffelen på bordet. Han skjenket bare fra sin egen karaffel på kjøkkenet. Der la hun giften, trygg på at bare faren ville få den i glasset. Men hun gjorde to feil. Hun tråkket i melisen som ble sølt da riskremen ble pyntet — ett smalt hælavtrykk, fra sko ingen andre på kjøkkenet gikk med. Og hun la sitt eget bordkort som brikke under karaffelen mens hun helte. «Jeg reiste meg aldri fra bordet», sa hun. Melisen og bordkortet sier noe annet. Beste begrunnelse vinner — ikke bare riktig navn.'
-  ) returning id into v_id;
-
-  insert into mystery_suspects (mystery_id, sort_order, name, tagline, public_info, secret, alibi, is_killer) values
-  (v_id, 1, 'Bjørnar Solli', 'Eldstesønnen og driftslederen',
-   'Har jobbet i firmaet i tjue år og omtaler seg selv som «neste generasjon Solli». Holdt en lang og selvsikker skål tidligere i kveld.',
-   'Faren tok deg til side i går og sa at du IKKE får overta firmaet — «du drikker for mye, gutt». Du har ikke fortalt det til noen. I ren trass kastet du lommelerka di ut i snøen bak huset da du kom i kveld — og du angrer allerede.',
-   'Jeg sto ved punsjbollen og skjenket for folk nesten hele kvelden. Spør hvem som helst — jeg var aldri på kjøkkenet.',
-   false),
-  (v_id, 2, 'Camilla Solli-Berg', 'Datteren og økonomisjefen',
-   'Styrer alt av tall i firmaet, og i kveld også poengene i firmaquizen. Satt ved langbordet med skjemaet foran seg hele kvelden.',
-   'Du har «lånt» av firmakontoen i to år for å dekke lån ingen kjenner til. Faren har bestilt full gjennomgang hos revisoren på nyåret. I kveld MÅ du fremstå som den rolige og ansvarlige i familien.',
-   'Jeg satt ved bordet og førte quizpoeng fra vi satte oss. Jeg reiste meg ikke en eneste gang før talen.',
-   true),
-  (v_id, 3, 'Lillian Solli', 'Kona og julebordsgeneralen',
-   'Har laget maten til julebordet i førti år. Gikk ut og inn av kjøkkenet hele kvelden — som alltid.',
-   'Du overhørte Arvid i telefonen forrige uke: han planla å selge firmaet til Rørcompaniet og flytte til Spania — uten å spørre deg. Dere kranglet så det haglet, og naboen kan ha hørt alt.',
-   'Selvfølgelig var jeg på kjøkkenet — noen må passe pinnekjøttet og pynte riskremen. Men akevitten hans har jeg aldri fått lov til å røre.',
-   false),
-  (v_id, 4, 'Roger «Rusken» Myhre', 'Verksmesteren og førstelærlingen',
-   'Arvids aller første lærling, femogtredve år i firmaet. Kjenner Arvids vaner bedre enn noen — også hvor han gjemmer den gode akevitten.',
-   'Du så noen smette ut fra kjøkkenet med noe blankt i hånden rett før talen. Men du tør ikke si det høyt — for da må du innrømme hvor du sto: i bakgangen, med lommelerka du fant i snøen.',
-   'Jeg var ute i røykeskuret. Kalde fingre, god samvittighet.',
-   false),
-  (v_id, 5, 'Trude Vang', 'Lærlingen og gulljenta',
-   'Nyutdannet og allerede Arvids favoritt. Fikk ansvar for musikken i kveld og har styrt spillelisten fra anlegget.',
-   'Arvid fortalte deg i forrige uke at det er DEG han vil utnevne til daglig leder — «familien kommer til å rase, men firmaet trenger deg». Du har allerede fortalt det til banken for å få boliglån.',
-   'Jeg sto ved musikkanlegget. Noen måtte redde festen fra familien Sollis spilleliste.',
-   false);
-
-  insert into mystery_polaroids (mystery_id, sort_order, title, caption) values
-  (v_id, 1, 'Karaffelen på kjøkkenet',
-   'Giften var ikke i glasset på bordet. Arvids private akevittkaraffel — den ingen andre får røre — står fremme på kjøkkenbenken. I bunnen: et grønnlig slam som ikke er krydder. Den som la gift her, visste nøyaktig hvem som kom til å drikke.'),
-  (v_id, 2, 'Melisen på gulvet',
-   'Da riskremen ble pyntet, ble det sølt melis på kjøkkengulvet. I melisen: ett tydelig, smalt hælavtrykk på vei mot benken. Ingen som var på kjøkkenet i kveld, gikk med smale hæler. Eller?'),
-  (v_id, 3, 'Bordkortet',
-   'Under karaffelen ligger et bordkort fra langbordet, brukt som brikke. Våt ring etter karaffelbunnen. Navnet på kortet: Camilla.'),
-  (v_id, 4, 'Lommelerka i snøen',
-   'En sølvfarget lommelerke ligger kastet i snøen utenfor bakdøren, gravert «B.S.». Hvem kaster en full lommelerke — og hvorfor akkurat i kveld?');
-end $$;
-
--- Innebygd mysterium 3: «Drapet på HR-sjefen» (fysisk opplegg i runbooks/).
-do $$
-declare
-  v_id uuid;
-begin
-  if exists (select 1 from mysteries where is_builtin and title = 'Drapet på HR-sjefen') then
-    return;
-  end if;
-
-  insert into mysteries (is_builtin, title, intro, resolution) values (
-    true,
-    'Drapet på HR-sjefen',
-    'Stemningen på firmafesten til Klyve & Ko var allerede anspent — midt i nedbemanningen «Prosjekt Slank Organisasjon» — da HR-sjef Wenche Wold (51) skålte for «en spennende omstilling for oss alle». Senere på kvelden raver hun inn fra gangen med sitt eget nøkkelkortbånd stramt rundt halsen, griper etter en krøllete utskrift og segner om foran hele festen. Arket er forsiden av nedbemanningslisten. Resten mangler. Dørene har kodelås, og ingen utenfra har vært inne. Morderen står blant kollegene — og festen fortsetter. Ingen går hjem før dette er løst.',
-    'Det var Nadia Haug, protesjeen. Wenche hadde selv løftet henne frem — helt til det kom et brev fra universitetet som bekreftet at mastergraden på CV-en aldri ble fullført. Wenche tok henne med ned i arkivet for «en tøff, men rettferdig samtale» og la brevet på bordet: innrøm alt mandag morgen, ellers gjør jeg det. For Nadia var det slutten på alt hun hadde bygget. Hun grep nøkkelkortbåndet som lå på arkivskapet og strammet til. Etterpå prøvde hun å makulere brevet, men maskinen satte seg fast halvveis. Så stilte hun seg på terrassen med hånden mot øret og «en viktig kundesamtale». Én detalj felte henne: telefonen hennes lå til lading ved miksepulten hele kvelden — midt i bakgrunnen på festbildet tatt 21.40. Man tar ikke kundesamtaler uten telefon. Beste begrunnelse vinner — ikke bare riktig navn.'
-  ) returning id into v_id;
-
-  insert into mystery_suspects (mystery_id, sort_order, name, tagline, public_info, secret, alibi, is_killer) values
-  (v_id, 1, 'Steinar Brekke', 'Mellomlederen på oppsigelseslisten',
-   'Tjuefem år i firmaet, leder for avdelingen alle vet skal «effektiviseres». Har stått ved bufféten i kveld med et smil som ikke når øynene.',
-   'Wenche fortalte deg på tomannshånd i forrige uke at du står øverst på listen. Du har ikke sagt det til kona. Og du sendte Wenche en rasende e-post du angrer bittert på: «Dette skal du få igjen.»',
-   'Jeg har stått ved bufféten hele kvelden og sørget for at folk forsyner seg. Må jo gjøre nytte for meg — mens jeg ennå kan.',
-   false),
-  (v_id, 2, 'Nadia Haug', 'Konsulenten og protesjeen',
-   'Firmaets stigende stjerne, håndplukket av Wenche selv. Alltid på, alltid tilgjengelig — hun tok visstnok en kundesamtale midt under festen.',
-   'Mastergraden på CV-en din ble aldri fullført. Et brev fra universitetet er på vei gjennom systemet, og du mistenker at Wenche allerede har lest det. Alt du har bygget, står og faller på at ingen får vite det.',
-   'Jeg sto på terrassen og tok en lang kundesamtale. Kundene i Singapore bryr seg ikke om at vi har fest.',
-   true),
-  (v_id, 3, 'Kjartan Moe', 'Tillitsvalgt og alles venn',
-   'Tillitsvalgt i tjue år. Har gått fra gruppe til gruppe hele kvelden og forsikret alle om at «ingen skal stå alene i dette».',
-   'Du har i hemmelighet forhandlet frem en avtale som freder DIN stilling — mot at du «bidrar til ro» rundt nedbemanningen. Avtalen ligger signert i arkivet. Kommer den ut, er du ferdig som tillitsvalgt.',
-   'Jeg har vært overalt og ingen steder, slik en tillitsvalgt skal. Spør hvem som helst — jeg har snakket med alle.',
-   false),
-  (v_id, 4, 'Benedikte Klyve', 'Daglig leder og arvingen',
-   'Tredje generasjon Klyve. Det er hun som har bestilt nedbemanningen — «en nødvendig trimming», som hun kaller det i talene sine.',
-   'Firmaet blør penger fordi DU har tømt det gjennom et konsulentprosjekt som aldri fantes. Wenche fant det i tallene og sa: «Rører du mine folk, går jeg til styret.» Nedbemanningslisten var deres dragkamp — og du var i ferd med å tape.',
-   'Jeg satt i baren og finpusset talen min. En leder må levere, også på fest.',
-   false),
-  (v_id, 5, 'Jonas Lie-Pettersen', 'IT-ansvarlig og festens DJ',
-   'Styrer alt fra nøkkelkort til spilleliste. Har sittet ved miksepulten hele kvelden og tatt bilder til intranettet.',
-   'Du har lest e-poster du aldri skulle lest — deriblant et brev fra et universitet om mastergraden til en kollega. Du har ikke sagt det til noen, for da må du forklare hvordan du fikk tak i det.',
-   'Jeg har sittet ved miksepulten hele kvelden. Musikk, bilder, ladestasjon — alt skjer hos meg.',
-   false);
-
-  insert into mystery_polaroids (mystery_id, sort_order, title, caption) values
-  (v_id, 1, 'Arkivet i kjelleren',
-   'Det skjedde ikke i gangen. I arkivet i kjelleren: en veltet stol, Wenches lesebriller på gulvet og en åpen skuff merket «Personal — konfidensielt». Én mappe ligger igjen, tom: «CV-verifisering».'),
-  (v_id, 2, 'Makuleringsmaskinen',
-   'Noen prøvde å makulere et brev i all hast, men maskinen satte seg fast halvveis. Øverst på det halvt oppspiste arket kan man fremdeles lese: «...bekrefter at kandidaten ikke fullførte mastergraden...».'),
-  (v_id, 3, 'Festbildet kl. 21.40',
-   'Jonas sitt bilde fra miksepulten, tatt 21.40. I bakgrunnen, tydelig i ladestasjonen: en telefon med glitrende deksel. Alle vet hvem den tilhører. Hvem tar en lang kundesamtale uten telefonen sin?'),
-  (v_id, 4, 'Avtalen i dressjakka',
-   'Et sammenbrettet dokument stikker opp av lommen på en dressjakke hengt over en stol: «Avtale om fredning av stilling — konfidensielt». Signert Wenche Wold og … Kjartan Moe.');
-end $$;
-
--- Kjøreplaner for de innebygde mysteriene (settes bare hvis feltet er tomt,
--- så egne redigeringer aldri overskrives). Full versjon med foto-instrukser
--- ligger i runbooks/-mappen i repoet.
-update mysteries set runbook =
-'REKVISITTER
-- Hvit skjorte med teaterblod og en falsk ljå limt/teipet på ryggen
-- De 6 polaroidene printet på forhånd (motivene står i Polaroider-fanen)
-- Tippelapper, penner og en bolle til innlevering
-
-PRESENTASJON — START
-- Odd Gunnar raver inn på tunet med ljåen i ryggen og segner om foran gjestene
-- Du tar kommando og roer gjestene: les åstedsrapporten høyt fra appen
-- Presenter de mistenkte én og én — hver sier hvem de er og leser alibiet sitt
-
-UTSPØRRINGEN — FESTEN FORTSETTER SOM FØR
-- Gjestene stiller spørsmål til de mistenkte
-- De mistenkte svarer fra rollekortene sine — ikke noe mer
-- App: sett fasen til «Etterforskningen»
-
-TIPPETIMEN ÅPNES
-- «Den neste timen kan dere tippe hvem morderen er»
-- Navn + begrunnelse på lapp — men ikke lever inn ennå
-- Gjestene mingler, diskuterer og forhører videre
-
-POLAROID-AVSLØRINGEN — CA. 15 MIN INN I TIPPETIMEN
-- Avbryt musikken og vis polaroidene én og én, les dem høyt
-- Spar kjøkkenvinduet kl. 21.12 til slutt
-- La gjestene koble selv: hvem sa hun var på kjøkkenet hele kvelden?
-- App: avslør de samme polaroidene i Polaroider-fanen
-
-LØSNINGEN — TIPPETIMEN SLUTT
-- Tippelappene leveres inn og leses opp med begrunnelser
-- Avslør: Randi sa hun var på kjøkkenet — men kl. 21.12 var kjøkkenet tomt og
-  kaffetrakteren kald. Smalt avtrykk i størrelse 38. «RE: frist mandag.»
-- Randi bryter sammen. Beste begrunnelse vinner — ikke bare riktig navn!
-- App: trykk den røde knappen, så får alle oppklaringen på telefonen'
-where is_builtin and title = 'Ljåmordet på grillfesten' and runbook = '';
-
-update mysteries set runbook =
-'REKVISITTER
-- Akevittglass til talen + «Arvids private» karaffel med grønt pulver i bunnen
-  (sukker + konditorfarge)
-- Melis til gulvsølet, bordkort til alle mistenkte, sølvfarget lommelerke («B.S.»)
-- De 4 polaroidene printet på forhånd:
-  1) Karaffelen med grønt slam  2) Melis på gulv med ETT smalt hælavtrykk
-  3) Camillas bordkort under karaffelen (våt ring)  4) Lommelerka i snøen
-- Tippelapper, penner og en bolle
-
-PRESENTASJON — START
-- Arvid reiser seg til tale: «I år skal dere få vite hvem som tar over …»
-- Han skåler, griper seg til halsen, velter glasset og segner om over bordet
-- Du tar kommando: les åstedsrapporten høyt. «Julebordet fortsetter!»
-- Presenter de 5 mistenkte én og én — hver leser alibiet sitt
-
-UTSPØRRINGEN — FESTEN FORTSETTER SOM FØR
-- Gjestene forhører de mistenkte ved bordet og i baren
-- De mistenkte svarer fra rollekortene — ikke noe mer
-- App: sett fasen til «Etterforskningen»
-
-TIPPETIMEN ÅPNES
-- «Den neste timen kan dere tippe hvem morderen er» — lapp med navn + begrunnelse
-
-POLAROID-AVSLØRINGEN — CA. 15 MIN INN I TIPPETIMEN
-- «Giften var ikke i glasset på bordet. Den var i karaffelen på KJØKKENET.»
-- Vis karaffelen først — alle ser på Lillian (hun er uskyldig!)
-- Så melisen og bordkortet. La gjestene koble selv: hvem sa hun aldri reiste
-  seg fra bordet? Lommelerka er ekstra støy
-- App: avslør de samme polaroidene i Polaroider-fanen
-
-LØSNINGEN — TIPPETIMEN SLUTT
-- Lappene leses opp med begrunnelser
-- Avslør: Camillas bordkort lå under karaffelen, hælavtrykket er hennes
-- Camilla bryter sammen. Beste begrunnelse vinner — ikke bare riktig navn!
-- App: trykk den røde knappen'
-where is_builtin and title = 'Giftmordet på julebordet' and runbook = '';
-
-update mysteries set runbook =
-'REKVISITTER
-- Nøkkelkortbånd (lanyard) med ID-kort — drapsvåpenet rundt halsen på Wenche
-- Krøllete utskrift: «NEDBEMANNINGSLISTEN — KONFIDENSIELT» (bare forsiden)
-- De 4 polaroidene printet på forhånd:
-  1) Arkivet: veltet stol, lesebriller, tom mappe «CV-verifisering»
-  2) Halvmakulert brev: «...bekrefter at kandidaten ikke fullførte mastergraden...»
-  3) «Festbilde kl. 21.40» med glittertelefon på lading ved miksepulten
-  4) «Fredningsavtale» som stikker opp av en dressjakkelomme
-- Tippelapper, penner og en bolle
-
-PRESENTASJON — START
-- Wenche skåler for «en spennende omstilling», forsvinner ut — og raver ti
-  minutter senere inn med båndet stramt rundt halsen og listen i hånden
-- Du tar kommando: les åstedsrapporten. «Ingen går hjem — men baren er åpen»
-- Presenter de 5 mistenkte én og én — hver leser alibiet sitt
-
-UTSPØRRINGEN — FESTEN FORTSETTER SOM FØR
-- Gjestene forhører de mistenkte i smågrupper
-- App: sett fasen til «Etterforskningen»
-
-TIPPETIMEN ÅPNES
-- «Den neste timen kan dere tippe hvem morderen er» — lapp med navn + begrunnelse
-
-POLAROID-AVSLØRINGEN — CA. 15 MIN INN I TIPPETIMEN
-- «Det skjedde ikke i gangen. Det skjedde i ARKIVET i kjelleren.»
-- Vis arkivet, så makuleringsmaskinen, så avtalen (alle ser på Kjartan — feil!)
-- Til slutt festbildet: hvem tar kundesamtale uten telefonen sin?
-- App: avslør de samme polaroidene i Polaroider-fanen
-
-LØSNINGEN — TIPPETIMEN SLUTT
-- Lappene leses opp med begrunnelser
-- Avslør: Nadia sto «i telefonen på terrassen» — mens telefonen lå på lading
-  ved miksepulten. Brevet i makulatoren var CV-dommen hennes
-- Nadia bryter sammen. Beste begrunnelse vinner — ikke bare riktig navn!
-- App: trykk den røde knappen'
-where is_builtin and title = 'Drapet på HR-sjefen' and runbook = '';
+(6, 'Veska i gangen',
+ 'En åpen veske i gangen. Opp av lomma stikker det som ser ut som skilsmissepapirer — med Solveig Vollans navn på.');
 
 -- ----------------------------------------------------------------------------
 -- 4) INTERNE HJELPEFUNKSJONER (ikke kallbare fra klienten)
@@ -558,42 +431,16 @@ revoke execute on function _poke(uuid, text) from public, anon, authenticated;
 -- 5) RPC: SPILLOPPSETT OG INNMELDING
 -- ----------------------------------------------------------------------------
 
--- Den gamle parameterløse varianten må bort, ellers blir RPC-kallet tvetydig.
-drop function if exists create_game();
-
--- Oppretter et nytt spill fra et valgt mysterium (null = det innebygde).
-create or replace function create_game(p_mystery_id uuid default null)
+-- Oppretter et nytt spill fra malene og returnerer vertsnøkkelen.
+create or replace function create_game()
 returns json
 language plpgsql security definer set search_path = public
 as $$
 declare
-  v_mystery  mysteries;
-  v_game     games;
-  v_code     text;
-  v_chars    text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; -- uten lett forvekslbare tegn
-  v_suspects int;
-  v_killers  int;
+  v_game  games;
+  v_code  text;
+  v_chars text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; -- uten lett forvekslbare tegn
 begin
-  if p_mystery_id is null then
-    select * into v_mystery from mysteries where is_builtin order by created_at limit 1;
-  else
-    select * into v_mystery from mysteries where id = p_mystery_id;
-  end if;
-  if v_mystery.id is null then
-    raise exception 'Fant ikke mysteriet';
-  end if;
-
-  -- Et spillbart mysterium har minst to mistenkte og nøyaktig én morder.
-  select count(*), count(*) filter (where is_killer)
-    into v_suspects, v_killers
-  from mystery_suspects where mystery_id = v_mystery.id;
-  if v_suspects < 2 then
-    raise exception 'Mysteriet «%» trenger minst to mistenkte før det kan spilles', v_mystery.title;
-  end if;
-  if v_killers <> 1 then
-    raise exception 'Mysteriet «%» må ha nøyaktig én morder (har %)', v_mystery.title, v_killers;
-  end if;
-
   -- Finn en ledig firetegns festkode.
   loop
     select string_agg(substr(v_chars, 1 + floor(random() * length(v_chars))::int, 1), '')
@@ -602,22 +449,23 @@ begin
     exit when not exists (select 1 from games where code = v_code);
   end loop;
 
-  -- Innholdet KOPIERES inn i spillet: verten kan redigere fritt underveis
-  -- uten å endre mysteriet, og mysteriet kan slettes uten å knekke fester.
-  insert into games (code, mystery_id, title, intro, resolution, runbook, owner_id)
-  values (v_code, v_mystery.id, v_mystery.title, v_mystery.intro, v_mystery.resolution,
-          coalesce(v_mystery.runbook, ''), auth.uid())
+  insert into games (code, title, intro, resolution)
+  select v_code, t.title, t.intro, t.resolution
+  from story_template t
+  where t.id = 1
   returning * into v_game;
 
-  insert into suspects (game_id, sort_order, name, tagline, public_info, secret, alibi, is_killer)
-  select v_game.id, s.sort_order, s.name, s.tagline, s.public_info, s.secret, s.alibi, s.is_killer
-  from mystery_suspects s
-  where s.mystery_id = v_mystery.id;
+  if v_game.id is null then
+    raise exception 'Fant ikke historiemalen — er hele skjemafila kjørt?';
+  end if;
 
-  insert into polaroids (game_id, sort_order, title, caption, image_url)
-  select v_game.id, p.sort_order, p.title, p.caption, p.image_url
-  from mystery_polaroids p
-  where p.mystery_id = v_mystery.id;
+  insert into suspects (game_id, sort_order, name, tagline, public_info, secret, alibi, is_killer)
+  select v_game.id, t.sort_order, t.name, t.tagline, t.public_info, t.secret, t.alibi, t.is_killer
+  from suspect_templates t;
+
+  insert into polaroids (game_id, sort_order, title, caption)
+  select v_game.id, t.sort_order, t.title, t.caption
+  from polaroid_templates t;
 
   perform _poke(v_game.id, 'game');
 
@@ -825,8 +673,7 @@ begin
   return json_build_object(
     'id', v_game.id, 'code', v_game.code, 'status', v_game.status,
     'phase', v_game.phase, 'title', v_game.title, 'intro', v_game.intro,
-    'resolution', v_game.resolution, 'runbook', coalesce(v_game.runbook, ''),
-    'created_at', v_game.created_at
+    'resolution', v_game.resolution, 'created_at', v_game.created_at
   );
 end $$;
 
@@ -1114,7 +961,7 @@ end $$;
 -- 9) EKSPLISITTE EXECUTE-RETTIGHETER PÅ RPC-ENE
 -- ----------------------------------------------------------------------------
 
-grant execute on function create_game(uuid) to anon, authenticated;
+grant execute on function create_game() to anon, authenticated;
 grant execute on function join_game(text, text) to anon, authenticated;
 grant execute on function get_my_player(uuid) to anon, authenticated;
 grant execute on function get_public_suspects(uuid) to anon, authenticated;
@@ -1136,8 +983,230 @@ grant execute on function host_update_suspect(uuid, uuid, text, text, text, text
 grant execute on function host_upsert_polaroid(uuid, uuid, text, text, text, int) to anon, authenticated;
 grant execute on function host_delete_polaroid(uuid, uuid) to anon, authenticated;
 
+-- ==========================================================================
+-- ▼ 00002_mysteries.sql
+-- ==========================================================================
+
+-- ============================================================================
+-- MIGRASJON 00002 — Flere mysterier (MurderMystery)
+--
+-- Gjør om appen fra ett innebygd mysterium til en katalog: `mysteries` er
+-- maler (med egne mistenkte, mordere og polaroider), og hvert spill kopierer
+-- innholdet fra ett mysterium når det opprettes. Forfattere identifiseres med
+-- en hemmelig owner_token — samme mønster som host_token/player_token.
+--
+-- Sikkerhet: mysteries.resolution og mystery_suspects.is_killer er like
+-- beskyttet som i spillene — de forlater bare databasen via owner_*-RPC-ene
+-- (krever owner_token). Det innebygde mysteriet har en owner_token ingen
+-- kjenner, så løsningen der nås kun via vertens spill-RPC-er.
+--
+-- Trygg å kjøre flere ganger. supabase-schema.sql inneholder samme sluttbilde.
+-- ============================================================================
+
 -- ----------------------------------------------------------------------------
--- 10) RPC: MYSTERIEKATALOG OG FORFATTERVERKSTED
+-- 1) NYE TABELLER
+-- ----------------------------------------------------------------------------
+
+create table if not exists mysteries (
+  id          uuid primary key default gen_random_uuid(),
+  owner_token uuid not null default gen_random_uuid(), -- hemmelig forfatternøkkel
+  is_builtin  boolean not null default false,
+  title       text not null,
+  intro       text not null default '',
+  resolution  text not null default '',                -- BESKYTTET
+  created_at  timestamptz not null default now()
+);
+
+create table if not exists mystery_suspects (
+  id          uuid primary key default gen_random_uuid(),
+  mystery_id  uuid not null references mysteries (id) on delete cascade,
+  sort_order  int  not null default 0,
+  name        text not null,
+  tagline     text not null default '',
+  public_info text not null default '',
+  secret      text not null default '',
+  alibi       text not null default '',
+  is_killer   boolean not null default false,          -- BESKYTTET
+  created_at  timestamptz not null default now()
+);
+
+create table if not exists mystery_polaroids (
+  id         uuid primary key default gen_random_uuid(),
+  mystery_id uuid not null references mysteries (id) on delete cascade,
+  sort_order int  not null default 0,
+  title      text not null default '',
+  caption    text not null default '',
+  image_url  text,
+  created_at timestamptz not null default now()
+);
+
+-- Spillet husker hvilket mysterium det ble laget fra (innholdet er likevel
+-- kopiert inn i spillet, så et slettet mysterium ødelegger ingen fest).
+alter table games add column if not exists
+  mystery_id uuid references mysteries (id) on delete set null;
+
+alter table mysteries         enable row level security;
+alter table mystery_suspects  enable row level security;
+alter table mystery_polaroids enable row level security;
+
+-- Ingen policies og ingen grants: all tilgang via RPC-ene under.
+revoke all on mysteries, mystery_suspects, mystery_polaroids from anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- 2) FLYTT DET INNEBYGDE MYSTERIET INN I KATALOGEN
+-- ----------------------------------------------------------------------------
+
+do $$
+declare
+  v_id uuid;
+begin
+  if exists (select 1 from mysteries where is_builtin) then
+    return; -- allerede migrert
+  end if;
+
+  insert into mysteries (is_builtin, title, intro, resolution) values (
+    true,
+    'Ljåmordet på grillfesten',
+    'Sommerkvelden på Vollan gård begynte med grillos, rabarbrasaft og gjensynsglede — og endte med et lik. Klokka halv ti fant grillmesteren verten selv, Odd Gunnar Vollan (61), bak redskapsskjulet. Ved siden av ham: gårdens gamle ljå. Grinden til tunet har vært lukket hele kvelden. Ingen har kommet, og ingen har gått. Morderen står fortsatt her — med saftglass i hånda. Lensmannen har tatt saken, og ingen forlater festen før den er løst.',
+    'Det var Randi Espeland, banksjefen. I årevis hadde hun dekket egne tap ved å «låne» fra kundenes kontoer — og forfalsket Odd Gunnars signatur på lånepapirene til det nye fjøset. Dagen før festen oppdaget Odd Gunnar det, og ga henne frist til mandag: meld deg selv, ellers ringer jeg Økokrim. Under festen ba han henne møte seg bak redskapsskjulet for å gi henne en siste sjanse. Hun tok med lånepapirene for å brenne dem på grillen — og da han snudde ryggen til, grep hun ljåen fra skjulveggen. Alibiet hennes sprakk med ett eneste gjestebilde: klokka 21.12 var kjøkkenet tomt og kaffetrakteren kald. Smalt støvelavtrykk i størrelse 38. Brente lånepapirer med falsk signatur i grillen. Og i notatboka til Odd Gunnar: «RE: frist mandag». RE. Randi Espeland. Sak avsluttet.'
+  ) returning id into v_id;
+
+  insert into mystery_suspects (mystery_id, sort_order, name, tagline, public_info, secret, alibi, is_killer) values
+  (v_id, 1, 'Solveig Vollan', 'Kona på gården',
+   'Gift med Odd Gunnar i 34 år. Sto for potetsalaten og smilte til alle hele kvelden — kanskje litt for bredt.',
+   'Du fant skilsmissepapirer i skrivebordet til Odd Gunnar forrige uke. Han skulle forlate deg — og ta gården med seg. Du har ikke fortalt det til noen, og du nekter å la noen få vite at ekteskapet var en fasade.',
+   'Jeg sto ved langbordet og skjenket rabarbrasaft fra halv ni til kvart på ti. Spør hvem som helst — glassene var aldri tomme.',
+   false),
+  (v_id, 2, 'Linn Vollan', 'Datteren som kom hjem',
+   'Flyttet til Oslo for åtte år siden. Dukket uventet opp på festen — første gang på gården siden jul.',
+   'Du skylder 340 000 kroner etter nettpoker. Du kom hjem for å be far om forskudd på arven. Han sa nei — høylytt — bak låven klokka kvart på ni. Flere kan ha hørt dere.',
+   'Jeg satt på trappa og røykte og så på solnedgangen. Alene, dessverre. Men jeg hørte musikken hele tiden.',
+   false),
+  (v_id, 3, 'Birger Brakstad', 'Naboen med grensetvisten',
+   'Grunneier på nabogården. Har kranglet med Odd Gunnar om et jorde i tolv år. Kom likevel i år — med hjemmelaget bringebærsaft som fredsgave.',
+   'Grensesaken skulle opp i jordskifteretten neste måned, og advokaten din sa rett ut at du kom til å tape alt. Med Odd Gunnar borte stopper hele saken. Du klarer ikke å slutte å tenke på det.',
+   'Jeg var borte ved vedstabelen og hentet mer ved til bålpanna. Det tar tid å finne tørr bjørk, vet du.',
+   false),
+  (v_id, 4, 'Kjell-Arne Mo', 'Gårdsarbeideren',
+   'Har jobbet på Vollan gård i ni år. Kjenner hver krok av gården — og vet hvor alt verktøyet henger.',
+   'Odd Gunnar ga deg sparken samme morgen. «Effektivisering», sa han. Du har ikke sagt det til noen — kona di tror fortsatt alt er som før. Du var rasende hele dagen.',
+   'Jeg grillet maiskolber på den lille grillen på baksiden. Der er det bare meg, som vanlig. Ingen ser gårdsarbeideren før maten er klar.',
+   false),
+  (v_id, 5, 'Randi Espeland', 'Banksjefen',
+   'Banksjef i bygda i femten år. Ordnet lånet da Vollan bygde nytt fjøs. Alltid pen i tøyet, alltid først til å skåle.',
+   'Du har «lånt» av kundenes kontoer for å dekke egne tap — og forfalsket Odd Gunnars signatur på lånepapirer. I går oppdaget han det og ga deg frist til mandag med å melde deg selv. Du MÅ få tak i papirene han sitter på, og ingen kan få vite om fristen.',
+   'Jeg var på kjøkkenet, satte på kaffetrakteren og ordnet kransekaka. Kjøkkenvinduet vender jo rett mot tunet — jeg så dere alle sammen.',
+   true),
+  (v_id, 6, 'Petter «Pjokken» Hauge', 'Grillmesteren',
+   'Bygdas selvutnevnte grillkonge. Var sammen med Linn på videregående og har aldri helt kommet over det. Det var han som fant Odd Gunnar.',
+   'Du så en skikkelse i mørke klær gå mot redskapsskjulet rundt klokka ni. Du tør ikke si det høyt — for da må du innrømme hvor du selv sto: bak låven, der du øvde deg på å be Linn ut igjen.',
+   'Grillen, selvfølgelig! En grillmester forlater aldri grillen. Bortsett fra da jeg hentet mer marinade. To minutter, maks. Kanskje fem.',
+   false),
+  (v_id, 7, 'Ingrid Sæter', 'Veterinæren',
+   'Bygdas veterinær. Var på gården så sent som i forrige uke for å se til en halt hoppe.',
+   'Rapporten din fra forrige uke skjuler noe: du fant tegn på vanskjøtsel i fjøset, men Odd Gunnar betalte deg for å «runde av» formuleringene. Kommer det ut, mister du lisensen. Du håper inderlig ingen ber om å få se rapporten.',
+   'Jeg var nede ved hestehagen og så til hoppa. Dyr merker uro lenge før mennesker, vet du. Hun var rastløs hele kvelden.',
+   false),
+  (v_id, 8, 'Tormod Lien', 'Den pensjonerte lensmannen',
+   'Bygdas lensmann i tretti år, nå pensjonist. Glemmer aldri et ansikt. Odd Gunnars gamle jaktkamerat.',
+   'For tjue år siden henla du en sak mot Odd Gunnar om forsikringssvindel — mot at han holdt munn om fyllekjøringen din. Han har «mint deg på det» hver eneste jul siden. Du kom på festen for å be ham slette gjelda en gang for alle.',
+   'Jeg satt i fluktstolen ved bålpanna hele kvelden. Gamle knær, unge øyne. Jeg så alt — trodde jeg.',
+   false);
+
+  insert into mystery_polaroids (mystery_id, sort_order, title, caption) values
+  (v_id, 1, 'Ljåen',
+   'Gårdens gamle ljå, funnet ved siden av Odd Gunnar. Skaftet er tørket omhyggelig rent — med en serviett fra festen. Morderen tenkte klart nok til å fjerne spor.'),
+  (v_id, 2, 'Fotavtrykk bak skjulet',
+   'Et smalt støvelavtrykk i den myke jorda bak redskapsskjulet. Størrelse 38, med fin hæl. Dette er ingen arbeidsstøvel.'),
+  (v_id, 3, 'Notatboka til Odd Gunnar',
+   'Siste side i notatboka, skrevet med hardt pennetrykk: «RE: frist mandag. Ellers ringer jeg Økokrim.»'),
+  (v_id, 4, 'Kjøkkenvinduet kl. 21.12',
+   'Et gjestebilde tatt mot tunet klokka 21.12. I bakgrunnen ses kjøkkenvinduet tydelig. Kjøkkenet er tomt — og kaffetrakteren står ikke på.'),
+  (v_id, 5, 'Grillen',
+   'Noen har brent papirer i grillen etter at maten var ferdig. Ett hjørne overlevde flammene: «...esignatur: Odd Gunnar Voll...» — men håndskriften er ikke hans.'),
+  (v_id, 6, 'Veska i gangen',
+   'En åpen veske i gangen. Opp av lomma stikker det som ser ut som skilsmissepapirer — med Solveig Vollans navn på.');
+end $$;
+
+-- De gamle mal-tabellene er erstattet av mysteries-katalogen.
+drop table if exists suspect_templates;
+drop table if exists polaroid_templates;
+drop table if exists story_template;
+
+-- ----------------------------------------------------------------------------
+-- 3) NY create_game: opprett spill fra et valgt mysterium
+-- ----------------------------------------------------------------------------
+
+-- Den gamle parameterløse varianten må bort, ellers blir RPC-kallet tvetydig.
+drop function if exists create_game();
+
+create or replace function create_game(p_mystery_id uuid default null)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_mystery  mysteries;
+  v_game     games;
+  v_code     text;
+  v_chars    text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  v_suspects int;
+  v_killers  int;
+begin
+  -- Uten angitt mysterium: bruk det innebygde (Ljåmordet på grillfesten).
+  if p_mystery_id is null then
+    select * into v_mystery from mysteries where is_builtin order by created_at limit 1;
+  else
+    select * into v_mystery from mysteries where id = p_mystery_id;
+  end if;
+  if v_mystery.id is null then
+    raise exception 'Fant ikke mysteriet';
+  end if;
+
+  -- Et spillbart mysterium har minst to mistenkte og nøyaktig én morder.
+  select count(*), count(*) filter (where is_killer)
+    into v_suspects, v_killers
+  from mystery_suspects where mystery_id = v_mystery.id;
+  if v_suspects < 2 then
+    raise exception 'Mysteriet «%» trenger minst to mistenkte før det kan spilles', v_mystery.title;
+  end if;
+  if v_killers <> 1 then
+    raise exception 'Mysteriet «%» må ha nøyaktig én morder (har %)', v_mystery.title, v_killers;
+  end if;
+
+  loop
+    select string_agg(substr(v_chars, 1 + floor(random() * length(v_chars))::int, 1), '')
+      into v_code
+      from generate_series(1, 4);
+    exit when not exists (select 1 from games where code = v_code);
+  end loop;
+
+  -- Innholdet KOPIERES inn i spillet: verten kan redigere fritt underveis
+  -- uten å endre mysteriet, og mysteriet kan slettes uten å knekke fester.
+  insert into games (code, mystery_id, title, intro, resolution)
+  values (v_code, v_mystery.id, v_mystery.title, v_mystery.intro, v_mystery.resolution)
+  returning * into v_game;
+
+  insert into suspects (game_id, sort_order, name, tagline, public_info, secret, alibi, is_killer)
+  select v_game.id, s.sort_order, s.name, s.tagline, s.public_info, s.secret, s.alibi, s.is_killer
+  from mystery_suspects s
+  where s.mystery_id = v_mystery.id;
+
+  insert into polaroids (game_id, sort_order, title, caption, image_url)
+  select v_game.id, p.sort_order, p.title, p.caption, p.image_url
+  from mystery_polaroids p
+  where p.mystery_id = v_mystery.id;
+
+  perform _poke(v_game.id, 'game');
+
+  return json_build_object(
+    'game_id', v_game.id,
+    'code', v_game.code,
+    'host_token', v_game.host_token
+  );
+end $$;
+
+-- ----------------------------------------------------------------------------
+-- 4) KATALOG OG FORFATTER-RPC-ER
 -- ----------------------------------------------------------------------------
 
 -- Offentlig katalog. Røper ALDRI løsning, hemmeligheter eller hvem morderen
@@ -1208,9 +1277,8 @@ begin
     end if;
   end if;
 
-  insert into mysteries (title, intro, resolution, runbook, owner_id)
-  values (v_title, coalesce(v_src.intro, ''), coalesce(v_src.resolution, ''),
-          coalesce(v_src.runbook, ''), auth.uid())
+  insert into mysteries (title, intro, resolution)
+  values (v_title, coalesce(v_src.intro, ''), coalesce(v_src.resolution, ''))
   returning * into v_new;
 
   if v_src.id is not null then
@@ -1241,8 +1309,8 @@ begin
   return json_build_object(
     'mystery', json_build_object(
       'id', v_mystery.id, 'title', v_mystery.title, 'intro', v_mystery.intro,
-      'resolution', v_mystery.resolution, 'runbook', coalesce(v_mystery.runbook, ''),
-      'is_builtin', v_mystery.is_builtin, 'created_at', v_mystery.created_at
+      'resolution', v_mystery.resolution, 'is_builtin', v_mystery.is_builtin,
+      'created_at', v_mystery.created_at
     ),
     'suspects', (
       select coalesce(json_agg(json_build_object(
@@ -1262,13 +1330,9 @@ begin
   );
 end $$;
 
--- Gammel signatur (uten p_runbook) må bort, ellers blir RPC-kallet tvetydig.
-drop function if exists owner_update_mystery(uuid, text, text, text);
-
 create or replace function owner_update_mystery(
   p_owner_token uuid,
-  p_title text default null, p_intro text default null,
-  p_resolution text default null, p_runbook text default null
+  p_title text default null, p_intro text default null, p_resolution text default null
 )
 returns json
 language plpgsql security definer set search_path = public
@@ -1279,8 +1343,7 @@ begin
   update mysteries set
     title      = coalesce(nullif(trim(p_title), ''), title),
     intro      = coalesce(p_intro, intro),
-    resolution = coalesce(p_resolution, resolution),
-    runbook    = coalesce(p_runbook, runbook)
+    resolution = coalesce(p_resolution, resolution)
   where id = v_mystery.id;
   return json_build_object('ok', true);
 end $$;
@@ -1430,10 +1493,15 @@ begin
   return json_build_object('ok', true);
 end $$;
 
+-- ----------------------------------------------------------------------------
+-- 5) EXECUTE-RETTIGHETER
+-- ----------------------------------------------------------------------------
+
+grant execute on function create_game(uuid) to anon, authenticated;
 grant execute on function list_mysteries() to anon, authenticated;
 grant execute on function create_mystery(text, uuid) to anon, authenticated;
 grant execute on function owner_get_mystery(uuid) to anon, authenticated;
-grant execute on function owner_update_mystery(uuid, text, text, text, text) to anon, authenticated;
+grant execute on function owner_update_mystery(uuid, text, text, text) to anon, authenticated;
 grant execute on function owner_upsert_suspect(uuid, uuid, text, text, text, text, text, int) to anon, authenticated;
 grant execute on function owner_set_killer(uuid, uuid) to anon, authenticated;
 grant execute on function owner_delete_suspect(uuid, uuid) to anon, authenticated;
@@ -1441,25 +1509,39 @@ grant execute on function owner_upsert_polaroid(uuid, uuid, text, text, text, in
 grant execute on function owner_delete_polaroid(uuid, uuid) to anon, authenticated;
 grant execute on function owner_delete_mystery(uuid) to anon, authenticated;
 
+-- ==========================================================================
+-- ▼ 00003_auth.sql
+-- ==========================================================================
+
+-- ============================================================================
+-- MIGRASJON 00003 — Vertskontoer (Supabase Auth, «lag på toppen»)
+--
+-- Legger til ekte innlogging for verter UTEN å rive ut den fungerende
+-- token-modellen: spill og mysterier styres fortsatt av hemmelige tokens i
+-- nettleseren, men når en INNLOGGET vert oppretter noe, knyttes det nå også
+-- til brukerkontoen (owner_id -> auth.users). Anonyme verter fungerer som før
+-- (owner_id blir da null).
+--
+-- Denne migrasjonen håndterer autentisering (hvem du er). Autorisasjon (hvem
+-- som får se/endre hva) håndheves i en senere migrasjon — se planen i README.
+--
+-- Trygg å kjøre flere ganger.
+-- ============================================================================
+
 -- ----------------------------------------------------------------------------
--- 11) AUTENTISERING: vertskontoer (Supabase Auth, «lag på toppen»)
---     Se supabase/migrations/00003_auth.sql. Autentisering (hvem du er) —
---     autorisasjon (hvem som får hva) håndheves i en senere migrasjon.
+-- 1) PROFILER — offentlig-trygg utvidelse av auth.users
+--    (Vi kopierer ALDRI passord eller tokens hit. Kun visningsnavn o.l.)
 -- ----------------------------------------------------------------------------
 
--- Profil: offentlig-trygg utvidelse av auth.users. Aldri passord/tokens her.
 create table if not exists profiles (
   id           uuid primary key references auth.users (id) on delete cascade,
-  first_name   text not null default '',
-  last_name    text not null default '',
   display_name text not null default '',
   created_at   timestamptz not null default now()
 );
-alter table profiles add column if not exists first_name text not null default '';
-alter table profiles add column if not exists last_name  text not null default '';
 
 alter table profiles enable row level security;
 
+-- En innlogget bruker kan lese og endre KUN sin egen profil.
 drop policy if exists "profiles_select_own" on profiles;
 create policy "profiles_select_own" on profiles
   for select to authenticated using (id = auth.uid());
@@ -1470,7 +1552,300 @@ create policy "profiles_update_own" on profiles
   using (id = auth.uid())
   with check (id = auth.uid());
 
--- Opprett profil automatisk ved registrering (fornavn + etternavn -> display_name).
+-- Ingen INSERT/DELETE-policy: rader opprettes av triggeren under (security
+-- definer) og slettes via cascade når brukeren slettes.
+
+-- Opprett en profil automatisk når en ny bruker registrerer seg. Visningsnavnet
+-- tas fra metadata klienten sendte ved registrering (raw_user_meta_data).
+create or replace function handle_new_user()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  insert into public.profiles (id, display_name)
+  values (new.id, coalesce(new.raw_user_meta_data ->> 'display_name', ''))
+  on conflict (id) do nothing;
+  return new;
+end $$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function handle_new_user();
+
+-- ----------------------------------------------------------------------------
+-- 2) EIERSKAP — knytt spill og mysterier til en konto (nullbart)
+-- ----------------------------------------------------------------------------
+
+alter table games     add column if not exists owner_id uuid references auth.users (id) on delete set null;
+alter table mysteries add column if not exists owner_id uuid references auth.users (id) on delete set null;
+
+create index if not exists games_owner_idx     on games (owner_id);
+create index if not exists mysteries_owner_idx on mysteries (owner_id);
+
+-- ----------------------------------------------------------------------------
+-- 3) Sett owner_id ved opprettelse (auth.uid() virker også i SECURITY DEFINER:
+--    den leser innloggingsclaimet fra forespørselen, ikke funksjonens rolle).
+--    Anonyme kall gir auth.uid() = null, altså samme oppførsel som før.
+-- ----------------------------------------------------------------------------
+
+create or replace function create_game(p_mystery_id uuid default null)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_mystery  mysteries;
+  v_game     games;
+  v_code     text;
+  v_chars    text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  v_suspects int;
+  v_killers  int;
+begin
+  if p_mystery_id is null then
+    select * into v_mystery from mysteries where is_builtin order by created_at limit 1;
+  else
+    select * into v_mystery from mysteries where id = p_mystery_id;
+  end if;
+  if v_mystery.id is null then
+    raise exception 'Fant ikke mysteriet';
+  end if;
+
+  select count(*), count(*) filter (where is_killer)
+    into v_suspects, v_killers
+  from mystery_suspects where mystery_id = v_mystery.id;
+  if v_suspects < 2 then
+    raise exception 'Mysteriet «%» trenger minst to mistenkte før det kan spilles', v_mystery.title;
+  end if;
+  if v_killers <> 1 then
+    raise exception 'Mysteriet «%» må ha nøyaktig én morder (har %)', v_mystery.title, v_killers;
+  end if;
+
+  loop
+    select string_agg(substr(v_chars, 1 + floor(random() * length(v_chars))::int, 1), '')
+      into v_code
+      from generate_series(1, 4);
+    exit when not exists (select 1 from games where code = v_code);
+  end loop;
+
+  insert into games (code, mystery_id, title, intro, resolution, owner_id)
+  values (v_code, v_mystery.id, v_mystery.title, v_mystery.intro, v_mystery.resolution, auth.uid())
+  returning * into v_game;
+
+  insert into suspects (game_id, sort_order, name, tagline, public_info, secret, alibi, is_killer)
+  select v_game.id, s.sort_order, s.name, s.tagline, s.public_info, s.secret, s.alibi, s.is_killer
+  from mystery_suspects s
+  where s.mystery_id = v_mystery.id;
+
+  insert into polaroids (game_id, sort_order, title, caption, image_url)
+  select v_game.id, p.sort_order, p.title, p.caption, p.image_url
+  from mystery_polaroids p
+  where p.mystery_id = v_mystery.id;
+
+  perform _poke(v_game.id, 'game');
+
+  return json_build_object(
+    'game_id', v_game.id,
+    'code', v_game.code,
+    'host_token', v_game.host_token
+  );
+end $$;
+
+create or replace function create_mystery(p_title text, p_copy_from uuid default null)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_title text := trim(coalesce(p_title, ''));
+  v_src   mysteries;
+  v_new   mysteries;
+begin
+  if v_title = '' then
+    raise exception 'Mysteriet trenger en tittel';
+  end if;
+  if length(v_title) > 120 then
+    raise exception 'Tittelen er for lang (maks 120 tegn)';
+  end if;
+
+  if p_copy_from is not null then
+    select * into v_src from mysteries where id = p_copy_from and is_builtin;
+    if not found then
+      raise exception 'Du kan bare kopiere fra de innebygde mysteriene';
+    end if;
+  end if;
+
+  insert into mysteries (title, intro, resolution, owner_id)
+  values (v_title, coalesce(v_src.intro, ''), coalesce(v_src.resolution, ''), auth.uid())
+  returning * into v_new;
+
+  if v_src.id is not null then
+    insert into mystery_suspects (mystery_id, sort_order, name, tagline, public_info, secret, alibi, is_killer)
+    select v_new.id, s.sort_order, s.name, s.tagline, s.public_info, s.secret, s.alibi, s.is_killer
+    from mystery_suspects s where s.mystery_id = v_src.id;
+
+    insert into mystery_polaroids (mystery_id, sort_order, title, caption, image_url)
+    select v_new.id, p.sort_order, p.title, p.caption, p.image_url
+    from mystery_polaroids p where p.mystery_id = v_src.id;
+  end if;
+
+  return json_build_object(
+    'mystery_id', v_new.id,
+    'owner_token', v_new.owner_token,
+    'title', v_new.title
+  );
+end $$;
+
+grant execute on function create_game(uuid) to anon, authenticated;
+grant execute on function create_mystery(text, uuid) to anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- 4) La en innlogget vert hente sin egen profil (til kontosiden).
+-- ----------------------------------------------------------------------------
+
+create or replace function get_my_profile()
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_row profiles;
+begin
+  if v_uid is null then
+    raise exception 'Ikke innlogget';
+  end if;
+  select * into v_row from profiles where id = v_uid;
+  return json_build_object(
+    'id', v_uid,
+    'display_name', coalesce(v_row.display_name, '')
+  );
+end $$;
+
+grant execute on function get_my_profile() to authenticated;
+
+-- ==========================================================================
+-- ▼ 00004_evidence.sql
+-- ==========================================================================
+
+-- ============================================================================
+-- MIGRASJON 00004 — Bevis (Evidence)
+--
+-- En egen, vertsstyrt bevisboks per fest — atskilt fra polaroidene.
+--   * Polaroider = ledetråder verten AVSLØRER for gjestene under spillet.
+--   * Bevis      = vertens PRIVATE saksmappe (vises aldri til gjestene).
+--
+-- Følger nøyaktig samme mønster som resten av modellen: RLS på uten policies,
+-- all tilgang via SECURITY DEFINER-RPC-er som validerer host_token. Bevis er
+-- knyttet til en fest (game_id); festen er igjen knyttet til en konto via
+-- games.owner_id (fase A), så håndhevet konto-eierskap i fase B arver dette.
+--
+-- Trygg å kjøre flere ganger.
+-- ============================================================================
+
+create table if not exists evidence (
+  id          uuid primary key default gen_random_uuid(),
+  game_id     uuid not null references games (id) on delete cascade,
+  sort_order  int  not null default 0,
+  title       text not null default '',
+  description text not null default '',
+  image_url   text,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists evidence_game_idx on evidence (game_id, sort_order);
+
+alter table evidence enable row level security;
+-- Ingen policies: klienten når aldri tabellen direkte. Fjern rettigheter for
+-- sikkerhets skyld (belte og bukseseler).
+revoke all on evidence from anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- RPC-er (kun vert, validert med host_token via _host_game)
+-- ----------------------------------------------------------------------------
+
+create or replace function host_list_evidence(p_host_token uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_game games := _host_game(p_host_token);
+begin
+  return (
+    select coalesce(json_agg(json_build_object(
+      'id', e.id, 'sort_order', e.sort_order, 'title', e.title,
+      'description', e.description, 'image_url', e.image_url, 'created_at', e.created_at
+    ) order by e.sort_order, e.created_at), '[]'::json)
+    from evidence e
+    where e.game_id = v_game.id
+  );
+end $$;
+
+create or replace function host_add_evidence(
+  p_host_token uuid, p_title text, p_description text default null, p_image_url text default null
+)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_game  games := _host_game(p_host_token);
+  v_title text := trim(coalesce(p_title, ''));
+  v_id    uuid;
+begin
+  if v_title = '' then
+    raise exception 'Beviset trenger en tittel';
+  end if;
+  if length(v_title) > 160 then
+    raise exception 'Tittelen er for lang (maks 160 tegn)';
+  end if;
+
+  insert into evidence (game_id, title, description, image_url, sort_order)
+  values (
+    v_game.id, v_title, coalesce(p_description, ''), nullif(trim(coalesce(p_image_url, '')), ''),
+    (select coalesce(max(sort_order), 0) + 1 from evidence where game_id = v_game.id)
+  )
+  returning id into v_id;
+
+  perform _poke(v_game.id, 'evidence');
+  return json_build_object('ok', true, 'id', v_id);
+end $$;
+
+create or replace function host_delete_evidence(p_host_token uuid, p_evidence_id uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_game games := _host_game(p_host_token);
+begin
+  delete from evidence where id = p_evidence_id and game_id = v_game.id;
+  if not found then
+    raise exception 'Ukjent bevis';
+  end if;
+
+  perform _poke(v_game.id, 'evidence');
+  return json_build_object('ok', true);
+end $$;
+
+grant execute on function host_list_evidence(uuid) to anon, authenticated;
+grant execute on function host_add_evidence(uuid, text, text, text) to anon, authenticated;
+grant execute on function host_delete_evidence(uuid, uuid) to anon, authenticated;
+
+-- ==========================================================================
+-- ▼ 00005_profile_names.sql
+-- ==========================================================================
+
+-- ============================================================================
+-- MIGRASJON 00005 — Fornavn og etternavn på profilen
+--
+-- Deler visningsnavnet i fornavn + etternavn, og lar en innlogget vert endre
+-- navnet sitt. display_name beholdes (utledet som «Fornavn Etternavn») og er
+-- det som vises f.eks. øverst til høyre i menyen.
+--
+-- Trygg å kjøre flere ganger.
+-- ============================================================================
+
+alter table profiles add column if not exists first_name text not null default '';
+alter table profiles add column if not exists last_name  text not null default '';
+
+-- Opprett profil ved registrering: hent fornavn/etternavn fra metadata og bygg
+-- display_name. Faller tilbake til et evt. eldre display_name-metadatafelt.
 create or replace function handle_new_user()
 returns trigger
 language plpgsql security definer set search_path = public
@@ -1482,18 +1857,17 @@ begin
   insert into public.profiles (id, first_name, last_name, display_name)
   values (
     new.id, v_first, v_last,
-    coalesce(nullif(trim(v_first || ' ' || v_last), ''), new.raw_user_meta_data ->> 'display_name', '')
+    coalesce(
+      nullif(trim(v_first || ' ' || v_last), ''),
+      new.raw_user_meta_data ->> 'display_name',
+      ''
+    )
   )
   on conflict (id) do nothing;
   return new;
 end $$;
 
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function handle_new_user();
-
--- Innlogget vert henter sin egen profil (til kontosiden + menyen).
+-- Profilen til den innloggede verten (til kontosiden + menyen).
 create or replace function get_my_profile()
 returns json
 language plpgsql security definer set search_path = public
@@ -1514,7 +1888,7 @@ begin
   );
 end $$;
 
--- La verten oppdatere navnet sitt.
+-- La verten oppdatere navnet sitt (fornavn + etternavn).
 create or replace function update_my_profile(p_first text, p_last text)
 returns json
 language plpgsql security definer set search_path = public
@@ -1538,6 +1912,7 @@ begin
      set first_name = v_first, last_name = v_last,
          display_name = trim(v_first || ' ' || v_last)
    where id = v_uid;
+
   if not found then
     insert into profiles (id, first_name, last_name, display_name)
     values (v_uid, v_first, v_last, trim(v_first || ' ' || v_last));
@@ -1549,27 +1924,1730 @@ end $$;
 grant execute on function get_my_profile() to authenticated;
 grant execute on function update_my_profile(text, text) to authenticated;
 
--- (Den tidligere «Bevis»/Evidence-fanen er fjernet. Polaroider heter nå «Bevis»
---  i grensesnittet; den gamle evidence-tabellen droppes i migrasjon 00008.)
+-- ==========================================================================
+-- ▼ 00006_two_new_mysteries.sql
+-- ==========================================================================
 
 -- ============================================================================
--- 13) SKJULT AGENDA — frittstående skjult-identitet-spill (VALGFRITT, AV som standard)
+-- MIGRASJON 00006 — To nye innebygde mysterier
 --
--- Et EGET spill, ikke en del av mordmysteriet. Har sin egen firetegns kode,
--- sin egen vertsnøkkel og sine egne spillere, og spilles på /skjult.html.
--- Se supabase/migrations/00011_saboteur_standalone.sql for full dokumentasjon.
+--   * «Giftmordet på julebordet»  — firmajulebord, gift i akevitten
+--   * «Drapet på HR-sjefen»       — firmafest under nedbemanning
 --
--- Kort om sikkerhetsmodellen (samme som resten av fila):
---   - app_feature_flags('SABOTEUR_GAME_ENABLED') sjekkes som FØRSTE setning i
---     hver eneste RPC, før noen token slås opp. Av som standard.
---   - RLS på alle tabeller, ZERO policies, grants trukket fra anon/authenticated.
---     All tilgang via SECURITY DEFINER-RPC-er med mottaker-spesifikk JSON.
---   - _saboteur_host/_saboteur_me speiler _host_game/_player: tokenet sier både
---     hvem du er OG hvilket spill du er i, så det finnes ingen spill-id å tukle med.
+-- Begge er bygget rundt det FYSISKE opplegget (se runbooks/-mappen i repoet):
+-- offeret gjør en entré og dør foran gjestene, festen fortsetter, og
+-- polaroidene er ekte utskrevne bilder verten har iscenesatt på forhånd.
+-- Polaroidene her i databasen er vertens digitale backup av de samme bevisene.
 --
--- Seksjonen dropper først den gamle, festbundne modellen fra 00009/00010 (den
--- var aldri skrudd på, så det finnes ingen data å miste) og bygger så opp den
--- frittstående modellen. Mordmysteriet sine tabeller røres aldri.
+-- Struktur per mysterium (samme dramaturgi som Ljåmordet-festen):
+--   1) Entré og død  2) Presentasjon av de mistenkte  3) Utspørring mens
+--   festen går  4) Tippetimen åpner  5) Polaroid-avsløring som FLYTTER
+--   åstedet  6) Løsning der et fysisk spor knuser ett alibi.
+--
+-- Trygg å kjøre flere ganger (hvert mysterium seedes bare hvis det mangler).
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- GIFTMORDET PÅ JULEBORDET
+-- ----------------------------------------------------------------------------
+do $$
+declare
+  v_id uuid;
+begin
+  if exists (select 1 from mysteries where is_builtin and title = 'Giftmordet på julebordet') then
+    return;
+  end if;
+
+  insert into mysteries (is_builtin, title, intro, resolution) values (
+    true,
+    'Giftmordet på julebordet',
+    'Julebordet til Solli & Sønner Rørleggerservice var i full gang med pinnekjøtt, firmaquiz og akevitt da grunnleggeren selv, Arvid Solli (68), reiste seg for å holde sin berømte tale. I år skulle han endelig kunngjøre hvem som tar over firmaet. Han rakk aldri så langt. Midt i skålen tok han seg til halsen, veltet glasset og segnet om over langbordet. Glasset luktet bittert. Ingen utenfra har vært i lokalet i kveld — den som forgiftet Arvid, sitter fortsatt til bords. Og julebordet? Det fortsetter som planlagt. Morderen skal ingen steder.',
+    'Det var Camilla Solli-Berg, datteren og økonomisjefen. I to år hadde hun dekket skjulte lån med penger fra firmakontoen, og på nyåret ventet full gjennomgang hos revisor — bestilt av faren selv. Camilla visste det alle i familien visste: Arvid rørte aldri felleskaraffelen på bordet. Han skjenket bare fra sin egen karaffel på kjøkkenet. Der la hun giften, trygg på at bare faren ville få den i glasset. Men hun gjorde to feil. Hun tråkket i melisen som ble sølt da riskremen ble pyntet — ett smalt hælavtrykk, fra sko ingen andre på kjøkkenet gikk med. Og hun la sitt eget bordkort som brikke under karaffelen mens hun helte. «Jeg reiste meg aldri fra bordet», sa hun. Melisen og bordkortet sier noe annet. Beste begrunnelse vinner — ikke bare riktig navn.'
+  ) returning id into v_id;
+
+  insert into mystery_suspects (mystery_id, sort_order, name, tagline, public_info, secret, alibi, is_killer) values
+  (v_id, 1, 'Bjørnar Solli', 'Eldstesønnen og driftslederen',
+   'Har jobbet i firmaet i tjue år og omtaler seg selv som «neste generasjon Solli». Holdt en lang og selvsikker skål tidligere i kveld.',
+   'Faren tok deg til side i går og sa at du IKKE får overta firmaet — «du drikker for mye, gutt». Du har ikke fortalt det til noen. I ren trass kastet du lommelerka di ut i snøen bak huset da du kom i kveld — og du angrer allerede.',
+   'Jeg sto ved punsjbollen og skjenket for folk nesten hele kvelden. Spør hvem som helst — jeg var aldri på kjøkkenet.',
+   false),
+  (v_id, 2, 'Camilla Solli-Berg', 'Datteren og økonomisjefen',
+   'Styrer alt av tall i firmaet, og i kveld også poengene i firmaquizen. Satt ved langbordet med skjemaet foran seg hele kvelden.',
+   'Du har «lånt» av firmakontoen i to år for å dekke lån ingen kjenner til. Faren har bestilt full gjennomgang hos revisoren på nyåret. I kveld MÅ du fremstå som den rolige og ansvarlige i familien.',
+   'Jeg satt ved bordet og førte quizpoeng fra vi satte oss. Jeg reiste meg ikke en eneste gang før talen.',
+   true),
+  (v_id, 3, 'Lillian Solli', 'Kona og julebordsgeneralen',
+   'Har laget maten til julebordet i førti år. Gikk ut og inn av kjøkkenet hele kvelden — som alltid.',
+   'Du overhørte Arvid i telefonen forrige uke: han planla å selge firmaet til Rørcompaniet og flytte til Spania — uten å spørre deg. Dere kranglet så det haglet, og naboen kan ha hørt alt.',
+   'Selvfølgelig var jeg på kjøkkenet — noen må passe pinnekjøttet og pynte riskremen. Men akevitten hans har jeg aldri fått lov til å røre.',
+   false),
+  (v_id, 4, 'Roger «Rusken» Myhre', 'Verksmesteren og førstelærlingen',
+   'Arvids aller første lærling, femogtredve år i firmaet. Kjenner Arvids vaner bedre enn noen — også hvor han gjemmer den gode akevitten.',
+   'Du så noen smette ut fra kjøkkenet med noe blankt i hånden rett før talen. Men du tør ikke si det høyt — for da må du innrømme hvor du sto: i bakgangen, med lommelerka du fant i snøen.',
+   'Jeg var ute i røykeskuret. Kalde fingre, god samvittighet.',
+   false),
+  (v_id, 5, 'Trude Vang', 'Lærlingen og gulljenta',
+   'Nyutdannet og allerede Arvids favoritt. Fikk ansvar for musikken i kveld og har styrt spillelisten fra anlegget.',
+   'Arvid fortalte deg i forrige uke at det er DEG han vil utnevne til daglig leder — «familien kommer til å rase, men firmaet trenger deg». Du har allerede fortalt det til banken for å få boliglån.',
+   'Jeg sto ved musikkanlegget. Noen måtte redde festen fra familien Sollis spilleliste.',
+   false);
+
+  insert into mystery_polaroids (mystery_id, sort_order, title, caption) values
+  (v_id, 1, 'Karaffelen på kjøkkenet',
+   'Giften var ikke i glasset på bordet. Arvids private akevittkaraffel — den ingen andre får røre — står fremme på kjøkkenbenken. I bunnen: et grønnlig slam som ikke er krydder. Den som la gift her, visste nøyaktig hvem som kom til å drikke.'),
+  (v_id, 2, 'Melisen på gulvet',
+   'Da riskremen ble pyntet, ble det sølt melis på kjøkkengulvet. I melisen: ett tydelig, smalt hælavtrykk på vei mot benken. Ingen som var på kjøkkenet i kveld, gikk med smale hæler. Eller?'),
+  (v_id, 3, 'Bordkortet',
+   'Under karaffelen ligger et bordkort fra langbordet, brukt som brikke. Våt ring etter karaffelbunnen. Navnet på kortet: Camilla.'),
+  (v_id, 4, 'Lommelerka i snøen',
+   'En sølvfarget lommelerke ligger kastet i snøen utenfor bakdøren, gravert «B.S.». Hvem kaster en full lommelerke — og hvorfor akkurat i kveld?');
+end $$;
+
+-- ----------------------------------------------------------------------------
+-- DRAPET PÅ HR-SJEFEN
+-- ----------------------------------------------------------------------------
+do $$
+declare
+  v_id uuid;
+begin
+  if exists (select 1 from mysteries where is_builtin and title = 'Drapet på HR-sjefen') then
+    return;
+  end if;
+
+  insert into mysteries (is_builtin, title, intro, resolution) values (
+    true,
+    'Drapet på HR-sjefen',
+    'Stemningen på firmafesten til Klyve & Ko var allerede anspent — midt i nedbemanningen «Prosjekt Slank Organisasjon» — da HR-sjef Wenche Wold (51) skålte for «en spennende omstilling for oss alle». Senere på kvelden raver hun inn fra gangen med sitt eget nøkkelkortbånd stramt rundt halsen, griper etter en krøllete utskrift og segner om foran hele festen. Arket er forsiden av nedbemanningslisten. Resten mangler. Dørene har kodelås, og ingen utenfra har vært inne. Morderen står blant kollegene — og festen fortsetter. Ingen går hjem før dette er løst.',
+    'Det var Nadia Haug, protesjeen. Wenche hadde selv løftet henne frem — helt til det kom et brev fra universitetet som bekreftet at mastergraden på CV-en aldri ble fullført. Wenche tok henne med ned i arkivet for «en tøff, men rettferdig samtale» og la brevet på bordet: innrøm alt mandag morgen, ellers gjør jeg det. For Nadia var det slutten på alt hun hadde bygget. Hun grep nøkkelkortbåndet som lå på arkivskapet og strammet til. Etterpå prøvde hun å makulere brevet, men maskinen satte seg fast halvveis. Så stilte hun seg på terrassen med hånden mot øret og «en viktig kundesamtale». Én detalj felte henne: telefonen hennes lå til lading ved miksepulten hele kvelden — midt i bakgrunnen på festbildet tatt 21.40. Man tar ikke kundesamtaler uten telefon. Beste begrunnelse vinner — ikke bare riktig navn.'
+  ) returning id into v_id;
+
+  insert into mystery_suspects (mystery_id, sort_order, name, tagline, public_info, secret, alibi, is_killer) values
+  (v_id, 1, 'Steinar Brekke', 'Mellomlederen på oppsigelseslisten',
+   'Tjuefem år i firmaet, leder for avdelingen alle vet skal «effektiviseres». Har stått ved bufféten i kveld med et smil som ikke når øynene.',
+   'Wenche fortalte deg på tomannshånd i forrige uke at du står øverst på listen. Du har ikke sagt det til kona. Og du sendte Wenche en rasende e-post du angrer bittert på: «Dette skal du få igjen.»',
+   'Jeg har stått ved bufféten hele kvelden og sørget for at folk forsyner seg. Må jo gjøre nytte for meg — mens jeg ennå kan.',
+   false),
+  (v_id, 2, 'Nadia Haug', 'Konsulenten og protesjeen',
+   'Firmaets stigende stjerne, håndplukket av Wenche selv. Alltid på, alltid tilgjengelig — hun tok visstnok en kundesamtale midt under festen.',
+   'Mastergraden på CV-en din ble aldri fullført. Et brev fra universitetet er på vei gjennom systemet, og du mistenker at Wenche allerede har lest det. Alt du har bygget, står og faller på at ingen får vite det.',
+   'Jeg sto på terrassen og tok en lang kundesamtale. Kundene i Singapore bryr seg ikke om at vi har fest.',
+   true),
+  (v_id, 3, 'Kjartan Moe', 'Tillitsvalgt og alles venn',
+   'Tillitsvalgt i tjue år. Har gått fra gruppe til gruppe hele kvelden og forsikret alle om at «ingen skal stå alene i dette».',
+   'Du har i hemmelighet forhandlet frem en avtale som freder DIN stilling — mot at du «bidrar til ro» rundt nedbemanningen. Avtalen ligger signert i arkivet. Kommer den ut, er du ferdig som tillitsvalgt.',
+   'Jeg har vært overalt og ingen steder, slik en tillitsvalgt skal. Spør hvem som helst — jeg har snakket med alle.',
+   false),
+  (v_id, 4, 'Benedikte Klyve', 'Daglig leder og arvingen',
+   'Tredje generasjon Klyve. Det er hun som har bestilt nedbemanningen — «en nødvendig trimming», som hun kaller det i talene sine.',
+   'Firmaet blør penger fordi DU har tømt det gjennom et konsulentprosjekt som aldri fantes. Wenche fant det i tallene og sa: «Rører du mine folk, går jeg til styret.» Nedbemanningslisten var deres dragkamp — og du var i ferd med å tape.',
+   'Jeg satt i baren og finpusset talen min. En leder må levere, også på fest.',
+   false),
+  (v_id, 5, 'Jonas Lie-Pettersen', 'IT-ansvarlig og festens DJ',
+   'Styrer alt fra nøkkelkort til spilleliste. Har sittet ved miksepulten hele kvelden og tatt bilder til intranettet.',
+   'Du har lest e-poster du aldri skulle lest — deriblant et brev fra et universitet om mastergraden til en kollega. Du har ikke sagt det til noen, for da må du forklare hvordan du fikk tak i det.',
+   'Jeg har sittet ved miksepulten hele kvelden. Musikk, bilder, ladestasjon — alt skjer hos meg.',
+   false);
+
+  insert into mystery_polaroids (mystery_id, sort_order, title, caption) values
+  (v_id, 1, 'Arkivet i kjelleren',
+   'Det skjedde ikke i gangen. I arkivet i kjelleren: en veltet stol, Wenches lesebriller på gulvet og en åpen skuff merket «Personal — konfidensielt». Én mappe ligger igjen, tom: «CV-verifisering».'),
+  (v_id, 2, 'Makuleringsmaskinen',
+   'Noen prøvde å makulere et brev i all hast, men maskinen satte seg fast halvveis. Øverst på det halvt oppspiste arket kan man fremdeles lese: «...bekrefter at kandidaten ikke fullførte mastergraden...».'),
+  (v_id, 3, 'Festbildet kl. 21.40',
+   'Jonas sitt bilde fra miksepulten, tatt 21.40. I bakgrunnen, tydelig i ladestasjonen: en telefon med glitrende deksel. Alle vet hvem den tilhører. Hvem tar en lang kundesamtale uten telefonen sin?'),
+  (v_id, 4, 'Avtalen i dressjakka',
+   'Et sammenbrettet dokument stikker opp av lommen på en dressjakke hengt over en stol: «Avtale om fredning av stilling — konfidensielt». Signert Wenche Wold og … Kjartan Moe.');
+end $$;
+
+-- ==========================================================================
+-- ▼ 00007_runbooks.sql
+-- ==========================================================================
+
+-- ============================================================================
+-- MIGRASJON 00007 — Kjøreplan (runbook) i appen
+--
+-- Hvert mysterium får en kjøreplan: regi, rekvisitter og tidslinje for det
+-- fysiske opplegget. Den kopieres inn i spillet ved opprettelse (som alt
+-- annet innhold), vises KUN i vertens Regi-fane, og kan redigeres i
+-- verkstedet.
+--
+-- SIKKERHET: kjøreplanen inneholder løsningen. Den går bare ut via
+-- host_get_game (host_token) og owner_get_mystery (owner_token) — aldri via
+-- spiller-RPC-ene eller list_mysteries. Kolonne-grants på games er uendret
+-- (runbook er ikke med i SELECT-listen som er innvilget klientroller).
+--
+-- Trygg å kjøre flere ganger.
+-- ============================================================================
+
+alter table mysteries add column if not exists runbook text not null default '';
+alter table games     add column if not exists runbook text not null default '';
+
+-- ----------------------------------------------------------------------------
+-- Oppdaterte funksjoner (kopier runbook / eksponer den for vert og forfatter)
+-- ----------------------------------------------------------------------------
+
+create or replace function create_game(p_mystery_id uuid default null)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_mystery  mysteries;
+  v_game     games;
+  v_code     text;
+  v_chars    text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  v_suspects int;
+  v_killers  int;
+begin
+  if p_mystery_id is null then
+    select * into v_mystery from mysteries where is_builtin order by created_at limit 1;
+  else
+    select * into v_mystery from mysteries where id = p_mystery_id;
+  end if;
+  if v_mystery.id is null then
+    raise exception 'Fant ikke mysteriet';
+  end if;
+
+  select count(*), count(*) filter (where is_killer)
+    into v_suspects, v_killers
+  from mystery_suspects where mystery_id = v_mystery.id;
+  if v_suspects < 2 then
+    raise exception 'Mysteriet «%» trenger minst to mistenkte før det kan spilles', v_mystery.title;
+  end if;
+  if v_killers <> 1 then
+    raise exception 'Mysteriet «%» må ha nøyaktig én morder (har %)', v_mystery.title, v_killers;
+  end if;
+
+  loop
+    select string_agg(substr(v_chars, 1 + floor(random() * length(v_chars))::int, 1), '')
+      into v_code
+      from generate_series(1, 4);
+    exit when not exists (select 1 from games where code = v_code);
+  end loop;
+
+  insert into games (code, mystery_id, title, intro, resolution, runbook, owner_id)
+  values (v_code, v_mystery.id, v_mystery.title, v_mystery.intro, v_mystery.resolution,
+          coalesce(v_mystery.runbook, ''), auth.uid())
+  returning * into v_game;
+
+  insert into suspects (game_id, sort_order, name, tagline, public_info, secret, alibi, is_killer)
+  select v_game.id, s.sort_order, s.name, s.tagline, s.public_info, s.secret, s.alibi, s.is_killer
+  from mystery_suspects s
+  where s.mystery_id = v_mystery.id;
+
+  insert into polaroids (game_id, sort_order, title, caption, image_url)
+  select v_game.id, p.sort_order, p.title, p.caption, p.image_url
+  from mystery_polaroids p
+  where p.mystery_id = v_mystery.id;
+
+  perform _poke(v_game.id, 'game');
+
+  return json_build_object(
+    'game_id', v_game.id,
+    'code', v_game.code,
+    'host_token', v_game.host_token
+  );
+end $$;
+
+create or replace function create_mystery(p_title text, p_copy_from uuid default null)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_title text := trim(coalesce(p_title, ''));
+  v_src   mysteries;
+  v_new   mysteries;
+begin
+  if v_title = '' then
+    raise exception 'Mysteriet trenger en tittel';
+  end if;
+  if length(v_title) > 120 then
+    raise exception 'Tittelen er for lang (maks 120 tegn)';
+  end if;
+
+  if p_copy_from is not null then
+    select * into v_src from mysteries where id = p_copy_from and is_builtin;
+    if not found then
+      raise exception 'Du kan bare kopiere fra de innebygde mysteriene';
+    end if;
+  end if;
+
+  insert into mysteries (title, intro, resolution, runbook, owner_id)
+  values (v_title, coalesce(v_src.intro, ''), coalesce(v_src.resolution, ''),
+          coalesce(v_src.runbook, ''), auth.uid())
+  returning * into v_new;
+
+  if v_src.id is not null then
+    insert into mystery_suspects (mystery_id, sort_order, name, tagline, public_info, secret, alibi, is_killer)
+    select v_new.id, s.sort_order, s.name, s.tagline, s.public_info, s.secret, s.alibi, s.is_killer
+    from mystery_suspects s where s.mystery_id = v_src.id;
+
+    insert into mystery_polaroids (mystery_id, sort_order, title, caption, image_url)
+    select v_new.id, p.sort_order, p.title, p.caption, p.image_url
+    from mystery_polaroids p where p.mystery_id = v_src.id;
+  end if;
+
+  return json_build_object(
+    'mystery_id', v_new.id,
+    'owner_token', v_new.owner_token,
+    'title', v_new.title
+  );
+end $$;
+
+create or replace function host_get_game(p_host_token uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_game games := _host_game(p_host_token);
+begin
+  return json_build_object(
+    'id', v_game.id, 'code', v_game.code, 'status', v_game.status,
+    'phase', v_game.phase, 'title', v_game.title, 'intro', v_game.intro,
+    'resolution', v_game.resolution, 'runbook', coalesce(v_game.runbook, ''),
+    'created_at', v_game.created_at
+  );
+end $$;
+
+create or replace function owner_get_mystery(p_owner_token uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_mystery mysteries := _owner_mystery(p_owner_token);
+begin
+  return json_build_object(
+    'mystery', json_build_object(
+      'id', v_mystery.id, 'title', v_mystery.title, 'intro', v_mystery.intro,
+      'resolution', v_mystery.resolution, 'runbook', coalesce(v_mystery.runbook, ''),
+      'is_builtin', v_mystery.is_builtin, 'created_at', v_mystery.created_at
+    ),
+    'suspects', (
+      select coalesce(json_agg(json_build_object(
+        'id', s.id, 'sort_order', s.sort_order, 'name', s.name, 'tagline', s.tagline,
+        'public_info', s.public_info, 'secret', s.secret, 'alibi', s.alibi,
+        'is_killer', s.is_killer
+      ) order by s.sort_order), '[]'::json)
+      from mystery_suspects s where s.mystery_id = v_mystery.id
+    ),
+    'polaroids', (
+      select coalesce(json_agg(json_build_object(
+        'id', p.id, 'sort_order', p.sort_order, 'title', p.title,
+        'caption', p.caption, 'image_url', p.image_url
+      ) order by p.sort_order), '[]'::json)
+      from mystery_polaroids p where p.mystery_id = v_mystery.id
+    )
+  );
+end $$;
+
+-- Ny signatur (med p_runbook): den gamle må bort først, ellers blir kallet
+-- tvetydig for PostgREST.
+drop function if exists owner_update_mystery(uuid, text, text, text);
+
+create or replace function owner_update_mystery(
+  p_owner_token uuid,
+  p_title text default null, p_intro text default null,
+  p_resolution text default null, p_runbook text default null
+)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_mystery mysteries := _owner_mystery(p_owner_token);
+begin
+  update mysteries set
+    title      = coalesce(nullif(trim(p_title), ''), title),
+    intro      = coalesce(p_intro, intro),
+    resolution = coalesce(p_resolution, resolution),
+    runbook    = coalesce(p_runbook, runbook)
+  where id = v_mystery.id;
+  return json_build_object('ok', true);
+end $$;
+
+grant execute on function owner_update_mystery(uuid, text, text, text, text) to anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Kjøreplaner for de innebygde mysteriene (settes bare hvis feltet er tomt,
+-- så en vert som har redigert sin egen tekst ikke får den overskrevet).
+-- ----------------------------------------------------------------------------
+
+update mysteries set runbook =
+'REKVISITTER
+- Hvit skjorte med teaterblod og en falsk ljå limt/teipet på ryggen
+- De 6 polaroidene printet på forhånd (motivene står i Polaroider-fanen)
+- Tippelapper, penner og en bolle til innlevering
+
+PRESENTASJON — START
+- Odd Gunnar raver inn på tunet med ljåen i ryggen og segner om foran gjestene
+- Du tar kommando og roer gjestene: les åstedsrapporten høyt fra appen
+- Presenter de mistenkte én og én — hver sier hvem de er og leser alibiet sitt
+
+UTSPØRRINGEN — FESTEN FORTSETTER SOM FØR
+- Gjestene stiller spørsmål til de mistenkte
+- De mistenkte svarer fra rollekortene sine — ikke noe mer
+- App: sett fasen til «Etterforskningen»
+
+TIPPETIMEN ÅPNES
+- «Den neste timen kan dere tippe hvem morderen er»
+- Navn + begrunnelse på lapp — men ikke lever inn ennå
+- Gjestene mingler, diskuterer og forhører videre
+
+POLAROID-AVSLØRINGEN — CA. 15 MIN INN I TIPPETIMEN
+- Avbryt musikken og vis polaroidene én og én, les dem høyt
+- Spar kjøkkenvinduet kl. 21.12 til slutt
+- La gjestene koble selv: hvem sa hun var på kjøkkenet hele kvelden?
+- App: avslør de samme polaroidene i Polaroider-fanen
+
+LØSNINGEN — TIPPETIMEN SLUTT
+- Tippelappene leveres inn og leses opp med begrunnelser
+- Avslør: Randi sa hun var på kjøkkenet — men kl. 21.12 var kjøkkenet tomt og
+  kaffetrakteren kald. Smalt avtrykk i størrelse 38. «RE: frist mandag.»
+- Randi bryter sammen. Beste begrunnelse vinner — ikke bare riktig navn!
+- App: trykk den røde knappen, så får alle oppklaringen på telefonen'
+where is_builtin and title = 'Ljåmordet på grillfesten' and runbook = '';
+
+update mysteries set runbook =
+'REKVISITTER
+- Akevittglass til talen + «Arvids private» karaffel med grønt pulver i bunnen
+  (sukker + konditorfarge)
+- Melis til gulvsølet, bordkort til alle mistenkte, sølvfarget lommelerke («B.S.»)
+- De 4 polaroidene printet på forhånd:
+  1) Karaffelen med grønt slam  2) Melis på gulv med ETT smalt hælavtrykk
+  3) Camillas bordkort under karaffelen (våt ring)  4) Lommelerka i snøen
+- Tippelapper, penner og en bolle
+
+PRESENTASJON — START
+- Arvid reiser seg til tale: «I år skal dere få vite hvem som tar over …»
+- Han skåler, griper seg til halsen, velter glasset og segner om over bordet
+- Du tar kommando: les åstedsrapporten høyt. «Julebordet fortsetter!»
+- Presenter de 5 mistenkte én og én — hver leser alibiet sitt
+
+UTSPØRRINGEN — FESTEN FORTSETTER SOM FØR
+- Gjestene forhører de mistenkte ved bordet og i baren
+- De mistenkte svarer fra rollekortene — ikke noe mer
+- App: sett fasen til «Etterforskningen»
+
+TIPPETIMEN ÅPNES
+- «Den neste timen kan dere tippe hvem morderen er» — lapp med navn + begrunnelse
+
+POLAROID-AVSLØRINGEN — CA. 15 MIN INN I TIPPETIMEN
+- «Giften var ikke i glasset på bordet. Den var i karaffelen på KJØKKENET.»
+- Vis karaffelen først — alle ser på Lillian (hun er uskyldig!)
+- Så melisen og bordkortet. La gjestene koble selv: hvem sa hun aldri reiste
+  seg fra bordet? Lommelerka er ekstra støy
+- App: avslør de samme polaroidene i Polaroider-fanen
+
+LØSNINGEN — TIPPETIMEN SLUTT
+- Lappene leses opp med begrunnelser
+- Avslør: Camillas bordkort lå under karaffelen, hælavtrykket er hennes
+- Camilla bryter sammen. Beste begrunnelse vinner — ikke bare riktig navn!
+- App: trykk den røde knappen'
+where is_builtin and title = 'Giftmordet på julebordet' and runbook = '';
+
+update mysteries set runbook =
+'REKVISITTER
+- Nøkkelkortbånd (lanyard) med ID-kort — drapsvåpenet rundt halsen på Wenche
+- Krøllete utskrift: «NEDBEMANNINGSLISTEN — KONFIDENSIELT» (bare forsiden)
+- De 4 polaroidene printet på forhånd:
+  1) Arkivet: veltet stol, lesebriller, tom mappe «CV-verifisering»
+  2) Halvmakulert brev: «...bekrefter at kandidaten ikke fullførte mastergraden...»
+  3) «Festbilde kl. 21.40» med glittertelefon på lading ved miksepulten
+  4) «Fredningsavtale» som stikker opp av en dressjakkelomme
+- Tippelapper, penner og en bolle
+
+PRESENTASJON — START
+- Wenche skåler for «en spennende omstilling», forsvinner ut — og raver ti
+  minutter senere inn med båndet stramt rundt halsen og listen i hånden
+- Du tar kommando: les åstedsrapporten. «Ingen går hjem — men baren er åpen»
+- Presenter de 5 mistenkte én og én — hver leser alibiet sitt
+
+UTSPØRRINGEN — FESTEN FORTSETTER SOM FØR
+- Gjestene forhører de mistenkte i smågrupper
+- App: sett fasen til «Etterforskningen»
+
+TIPPETIMEN ÅPNES
+- «Den neste timen kan dere tippe hvem morderen er» — lapp med navn + begrunnelse
+
+POLAROID-AVSLØRINGEN — CA. 15 MIN INN I TIPPETIMEN
+- «Det skjedde ikke i gangen. Det skjedde i ARKIVET i kjelleren.»
+- Vis arkivet, så makuleringsmaskinen, så avtalen (alle ser på Kjartan — feil!)
+- Til slutt festbildet: hvem tar kundesamtale uten telefonen sin?
+- App: avslør de samme polaroidene i Polaroider-fanen
+
+LØSNINGEN — TIPPETIMEN SLUTT
+- Lappene leses opp med begrunnelser
+- Avslør: Nadia sto «i telefonen på terrassen» — mens telefonen lå på lading
+  ved miksepulten. Brevet i makulatoren var CV-dommen hennes
+- Nadia bryter sammen. Beste begrunnelse vinner — ikke bare riktig navn!
+- App: trykk den røde knappen'
+where is_builtin and title = 'Drapet på HR-sjefen' and runbook = '';
+
+-- ==========================================================================
+-- ▼ 00008_remove_evidence.sql
+-- ==========================================================================
+
+-- ============================================================================
+-- MIGRASJON 00008 — Fjern den separate «Bevis»/Evidence-funksjonen
+--
+-- «Polaroider» heter nå «Bevis» i grensesnittet, så den egne evidence-fanen
+-- er overflødig. Denne migrasjonen fjerner den fra databasen.
+--
+-- OBS: dette sletter evidence-tabellen og alt innhold i den. Det er meningen —
+-- funksjonen er tatt ut. Polaroidene (som nå heter «Bevis») er en egen tabell
+-- og røres ikke.
+--
+-- Trygg å kjøre flere ganger.
+-- ============================================================================
+
+drop function if exists host_list_evidence(uuid);
+drop function if exists host_add_evidence(uuid, text, text, text);
+drop function if exists host_delete_evidence(uuid, uuid);
+
+drop table if exists evidence;
+
+-- ==========================================================================
+-- ▼ 00009_saboteur_game.sql
+-- ==========================================================================
+
+-- ============================================================================
+-- MIGRASJON 00009 — Skjult agenda (hidden-identity social deduction mode)
+--
+-- A fully additive, opt-in game mode layered INSIDE an existing party
+-- (games row). Nothing here alters or is read by the murder-mystery tables.
+--
+-- REUSE, NOT REDESIGN:
+--   - "party/session"      -> an existing games.id (unchanged table)
+--   - "eligible players"   -> existing players rows for that game_id
+--   - "host / game-master" -> the SAME host_token that already controls that
+--                             games row, resolved via the EXISTING _host_game()
+--   - "player identity"    -> the SAME player_token each guest already has,
+--                             resolved via the EXISTING _player()
+--   No second auth model, no new accounts, no auth.uid() requirement — this
+--   works for anonymous host_token-only hosting exactly like the rest of
+--   the app, by deliberate choice (see the approved Phase 1 plan).
+--
+-- FEATURE FLAG (default OFF everywhere, enforced server-side):
+--   app_feature_flags('SABOTEUR_GAME_ENABLED') is checked as the FIRST
+--   statement of every single RPC below, before any token is even resolved.
+--   With the flag off, every RPC refuses identically regardless of token
+--   validity — a guessed call from devtools cannot enable or probe anything.
+--   A client-side VITE_SABOTEUR_GAME_ENABLED build flag additionally hides
+--   the UI entry points, but the server check above is the real gate.
+--
+-- SECRECY MODEL (same idiom as the rest of this schema):
+--   RLS enabled, ZERO policies, all grants revoked from anon/authenticated
+--   on every new table. All access goes through SECURITY DEFINER RPCs that
+--   hand-build minimal, viewer-specific JSON (never `select *`). Two new
+--   internal helpers mirror _host_game/_player exactly, and additionally
+--   verify the resolved saboteur row belongs to the CALLER'S OWN game_id —
+--   this is what stops cross-game ID tampering even with a valid token.
+--
+-- VOTE SECRECY — an interpretation worth stating explicitly: "votes stay
+--   secret until Vertskontroll closes and explicitly reveals" is read here
+--   as applying even to the host's own live view, not just to players — the
+--   host sees a live ballot COUNT while a round is open, but the per-target
+--   tally is only computed and returned once the host has both closed AND
+--   explicitly revealed that round. This matches "Do not reveal roles
+--   merely because a vote has happened."
+--
+-- Idempotent (safe to re-run): create-if-not-exists / create-or-replace
+-- throughout, feature flag seeded only if missing.
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- 0) FEATURE FLAG
+-- ----------------------------------------------------------------------------
+
+create table if not exists app_feature_flags (
+  key     text primary key,
+  enabled boolean not null default false
+);
+
+insert into app_feature_flags (key, enabled)
+values ('SABOTEUR_GAME_ENABLED', false)
+on conflict (key) do nothing;
+
+alter table app_feature_flags enable row level security;
+revoke all on app_feature_flags from anon, authenticated;
+
+-- Internal-only: no client role may call this directly (revoked below with
+-- the rest). Every public RPC in this file calls it as its first statement.
+create or replace function _saboteur_enabled()
+returns boolean
+language sql security definer set search_path = public
+as $$
+  select coalesce((select enabled from app_feature_flags where key = 'SABOTEUR_GAME_ENABLED'), false);
+$$;
+
+revoke execute on function _saboteur_enabled() from public, anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- 1) TABELLER (all additive; nothing existing is touched)
+-- ----------------------------------------------------------------------------
+
+create table if not exists saboteur_games (
+  id               uuid primary key default gen_random_uuid(),
+  game_id          uuid not null references games (id) on delete cascade,
+  status           text not null default 'draft'
+                   check (status in ('draft','active','voting','paused','ended','archived')),
+  know_each_other  boolean not null default false,
+  show_leaderboard boolean not null default false,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now()
+);
+
+-- Only one non-archived Skjult agenda per fest at a time (approved scope).
+create unique index if not exists saboteur_games_one_active_per_game
+  on saboteur_games (game_id) where status <> 'archived';
+create index if not exists saboteur_games_game_idx on saboteur_games (game_id);
+
+create table if not exists saboteur_participants (
+  id               uuid primary key default gen_random_uuid(),
+  saboteur_game_id uuid not null references saboteur_games (id) on delete cascade,
+  player_id        uuid not null references players (id) on delete cascade,
+  role             text not null check (role in ('SABOTEUR','LOYAL')),
+  active           boolean not null default true,
+  created_at       timestamptz not null default now(),
+  unique (saboteur_game_id, player_id)
+);
+create index if not exists saboteur_participants_game_idx on saboteur_participants (saboteur_game_id);
+create index if not exists saboteur_participants_player_idx on saboteur_participants (player_id);
+
+create table if not exists saboteur_objectives (
+  id                      uuid primary key default gen_random_uuid(),
+  saboteur_game_id        uuid not null references saboteur_games (id) on delete cascade,
+  assigned_participant_id uuid not null references saboteur_participants (id) on delete cascade,
+  title                   text not null,
+  description             text not null default '',
+  points                  int  not null default 0 check (points >= 0),
+  expires_at              timestamptz,
+  status                  text not null default 'assigned'
+                          check (status in ('assigned','claimed','approved','rejected')),
+  claimed_at              timestamptz,
+  decided_at              timestamptz,
+  created_at              timestamptz not null default now()
+);
+create index if not exists saboteur_objectives_game_idx on saboteur_objectives (saboteur_game_id);
+create index if not exists saboteur_objectives_participant_idx on saboteur_objectives (assigned_participant_id);
+
+create table if not exists saboteur_tasks (
+  id                      uuid primary key default gen_random_uuid(),
+  saboteur_game_id        uuid not null references saboteur_games (id) on delete cascade,
+  assigned_participant_id uuid not null references saboteur_participants (id) on delete cascade,
+  title                   text not null,
+  description             text not null default '',
+  hint_text               text not null default '',
+  hint_audience           text not null default 'assignee' check (hint_audience in ('assignee','all_loyal')),
+  status                  text not null default 'assigned'
+                          check (status in ('assigned','claimed','approved','rejected')),
+  claimed_at              timestamptz,
+  decided_at              timestamptz,
+  created_at              timestamptz not null default now()
+);
+create index if not exists saboteur_tasks_game_idx on saboteur_tasks (saboteur_game_id);
+create index if not exists saboteur_tasks_participant_idx on saboteur_tasks (assigned_participant_id);
+
+-- Append-only: decouples "who is entitled to see this hint" from re-deriving
+-- audience logic on every read, and makes release idempotent (see below).
+create table if not exists saboteur_hint_releases (
+  id                         uuid primary key default gen_random_uuid(),
+  task_id                    uuid not null references saboteur_tasks (id) on delete cascade,
+  released_to_participant_id uuid not null references saboteur_participants (id) on delete cascade,
+  created_at                 timestamptz not null default now(),
+  unique (task_id, released_to_participant_id)
+);
+create index if not exists saboteur_hint_releases_participant_idx on saboteur_hint_releases (released_to_participant_id);
+
+create table if not exists saboteur_voting_rounds (
+  id               uuid primary key default gen_random_uuid(),
+  saboteur_game_id uuid not null references saboteur_games (id) on delete cascade,
+  status           text not null default 'open' check (status in ('open','closed','revealed')),
+  opened_at        timestamptz not null default now(),
+  closed_at        timestamptz,
+  revealed_at      timestamptz
+);
+-- Only one OPEN round per Skjult agenda at a time.
+create unique index if not exists saboteur_voting_rounds_one_open
+  on saboteur_voting_rounds (saboteur_game_id) where status = 'open';
+create index if not exists saboteur_voting_rounds_game_idx on saboteur_voting_rounds (saboteur_game_id);
+
+create table if not exists saboteur_ballots (
+  id                    uuid primary key default gen_random_uuid(),
+  voting_round_id       uuid not null references saboteur_voting_rounds (id) on delete cascade,
+  voter_participant_id  uuid not null references saboteur_participants (id) on delete cascade,
+  target_participant_id uuid not null references saboteur_participants (id) on delete cascade,
+  created_at            timestamptz not null default now(),
+  -- THE one-ballot-per-eligible-Lojal-per-round guarantee, enforced by the
+  -- database itself, not just application logic.
+  unique (voting_round_id, voter_participant_id)
+);
+create index if not exists saboteur_ballots_round_idx on saboteur_ballots (voting_round_id);
+create index if not exists saboteur_ballots_target_idx on saboteur_ballots (target_participant_id);
+
+-- Append-only score events (never mutate a running total column) — current
+-- score = sum(points) for a participant. The partial unique index below is
+-- the idempotency guarantee: approving the same objective twice (a retried
+-- request) cannot insert a second row for the same source_id.
+create table if not exists saboteur_points_ledger (
+  id             uuid primary key default gen_random_uuid(),
+  participant_id uuid not null references saboteur_participants (id) on delete cascade,
+  source_type    text not null check (source_type in ('objective','adjustment')),
+  source_id      uuid,
+  points         int not null,
+  created_at     timestamptz not null default now()
+);
+create unique index if not exists saboteur_points_ledger_idempotent
+  on saboteur_points_ledger (source_type, source_id) where source_id is not null;
+create index if not exists saboteur_points_ledger_participant_idx on saboteur_points_ledger (participant_id);
+
+-- Append-only audit trail for every host action that materially affects the
+-- game. Host-only readable (host_get_saboteur_audit).
+create table if not exists saboteur_audit_log (
+  id               bigint generated always as identity primary key,
+  saboteur_game_id uuid not null references saboteur_games (id) on delete cascade,
+  actor            text not null default 'host',
+  action           text not null,
+  payload          jsonb not null default '{}'::jsonb,
+  created_at       timestamptz not null default now()
+);
+create index if not exists saboteur_audit_log_game_idx on saboteur_audit_log (saboteur_game_id, id);
+
+-- ----------------------------------------------------------------------------
+-- 2) RLS: enabled, ZERO policies on every new table (identical idiom to the
+--    rest of this schema). All access is via the RPCs in section 4/5.
+-- ----------------------------------------------------------------------------
+
+alter table saboteur_games          enable row level security;
+alter table saboteur_participants   enable row level security;
+alter table saboteur_objectives     enable row level security;
+alter table saboteur_tasks          enable row level security;
+alter table saboteur_hint_releases  enable row level security;
+alter table saboteur_voting_rounds  enable row level security;
+alter table saboteur_ballots        enable row level security;
+alter table saboteur_points_ledger  enable row level security;
+alter table saboteur_audit_log      enable row level security;
+
+revoke all on saboteur_games, saboteur_participants, saboteur_objectives, saboteur_tasks,
+  saboteur_hint_releases, saboteur_voting_rounds, saboteur_ballots, saboteur_points_ledger,
+  saboteur_audit_log
+  from anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- 3) INTERNE HJELPEFUNKSJONER (mirror _host_game / _player exactly)
+-- ----------------------------------------------------------------------------
+
+-- Resolves p_host_token via the EXISTING _host_game(), then requires the
+-- saboteur_games row to belong to THAT host's own games.id. A valid
+-- host_token can never unlock a Skjult agenda belonging to someone else's
+-- party — this is the cross-game-tampering guard.
+create or replace function _saboteur_game_for_host(p_host_token uuid, p_saboteur_game_id uuid)
+returns saboteur_games
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_game    games := _host_game(p_host_token);
+  v_sabgame saboteur_games;
+begin
+  select * into v_sabgame from saboteur_games
+  where id = p_saboteur_game_id and game_id = v_game.id;
+  if not found then
+    raise exception 'Fant ikke Skjult agenda-spillet';
+  end if;
+  return v_sabgame;
+end $$;
+
+revoke execute on function _saboteur_game_for_host(uuid, uuid) from public, anon, authenticated;
+
+-- Same guarantee for a player: resolves p_player_token via the EXISTING
+-- _player(), then requires a saboteur_participants row for THIS player in a
+-- saboteur_game that belongs to the player's own game_id.
+create or replace function _saboteur_participant_for_player(p_player_token uuid, p_saboteur_game_id uuid)
+returns saboteur_participants
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_player  players := _player(p_player_token);
+  v_sabgame saboteur_games;
+  v_part    saboteur_participants;
+begin
+  select * into v_sabgame from saboteur_games
+  where id = p_saboteur_game_id and game_id = v_player.game_id;
+  if not found then
+    raise exception 'Fant ikke Skjult agenda-spillet';
+  end if;
+
+  select * into v_part from saboteur_participants
+  where saboteur_game_id = v_sabgame.id and player_id = v_player.id;
+  if not found then
+    raise exception 'Du er ikke med i dette spillet';
+  end if;
+  return v_part;
+end $$;
+
+revoke execute on function _saboteur_participant_for_player(uuid, uuid) from public, anon, authenticated;
+
+create or replace function _saboteur_audit(p_saboteur_game_id uuid, p_action text, p_payload jsonb default '{}'::jsonb)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+begin
+  insert into saboteur_audit_log (saboteur_game_id, actor, action, payload)
+  values (p_saboteur_game_id, 'host', p_action, p_payload);
+end $$;
+
+revoke execute on function _saboteur_audit(uuid, text, jsonb) from public, anon, authenticated;
+
+-- Shared status-transition applier (one allowed-edges table, used by
+-- host_set_saboteur_status / host_end_saboteur_game / host_archive_saboteur_game).
+-- 'voting' is deliberately NOT settable here: that transition has side
+-- effects (creating/closing a round) and only happens via the two dedicated
+-- voting-round RPCs below.
+create or replace function _saboteur_apply_transition(p_saboteur_game_id uuid, p_new_status text)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_game saboteur_games;
+  v_ok   boolean;
+begin
+  select * into v_game from saboteur_games where id = p_saboteur_game_id;
+
+  if v_game.status = 'voting' then
+    raise exception 'Lukk avstemningsrunden først (host_close_voting_round)';
+  end if;
+  if p_new_status = 'voting' then
+    raise exception 'Bruk host_open_voting_round for å åpne en avstemningsrunde';
+  end if;
+
+  v_ok := (v_game.status, p_new_status) in (
+    ('draft', 'active'), ('active', 'draft'),
+    ('active', 'paused'), ('paused', 'active'),
+    ('active', 'ended'), ('paused', 'ended'),
+    ('ended', 'archived')
+  );
+  if not v_ok then
+    raise exception 'Kan ikke gå fra «%» til «%»', v_game.status, p_new_status;
+  end if;
+
+  if v_game.status = 'draft' and p_new_status = 'active' then
+    if (select count(distinct role) from saboteur_participants
+        where saboteur_game_id = p_saboteur_game_id and active) < 2 then
+      raise exception 'Trenger minst én Sabotør og én Lojal før spillet kan starte';
+    end if;
+  end if;
+
+  update saboteur_games set status = p_new_status, updated_at = now() where id = p_saboteur_game_id;
+
+  perform _saboteur_audit(
+    p_saboteur_game_id,
+    case when v_game.status = 'active' and p_new_status = 'draft' then 'reopen_roles' else 'state_change' end,
+    jsonb_build_object('from', v_game.status, 'to', p_new_status)
+  );
+end $$;
+
+revoke execute on function _saboteur_apply_transition(uuid, text) from public, anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- 4) RPC: VERTSKONTROLL (host_token; every function checks the flag FIRST,
+--    before resolving any token, so a disabled feature refuses identically
+--    regardless of token validity)
+-- ----------------------------------------------------------------------------
+
+create or replace function host_create_saboteur_game(p_host_token uuid, p_know_each_other boolean default false)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_game    games;
+  v_sabgame saboteur_games;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  v_game := _host_game(p_host_token);
+
+  begin
+    insert into saboteur_games (game_id, know_each_other)
+    values (v_game.id, coalesce(p_know_each_other, false))
+    returning * into v_sabgame;
+  exception when unique_violation then
+    raise exception 'Det finnes allerede en aktiv Skjult agenda for denne festen';
+  end;
+
+  perform _saboteur_audit(v_sabgame.id, 'game_created', jsonb_build_object('know_each_other', v_sabgame.know_each_other));
+  return json_build_object('saboteur_game_id', v_sabgame.id, 'status', v_sabgame.status);
+end $$;
+
+create or replace function host_list_eligible_participants(p_host_token uuid, p_saboteur_game_id uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_game    games;
+  v_sabgame saboteur_games;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  v_game := _host_game(p_host_token);
+  v_sabgame := _saboteur_game_for_host(p_host_token, p_saboteur_game_id);
+
+  return (
+    select coalesce(json_agg(json_build_object(
+      'player_id', p.id, 'display_name', p.display_name,
+      'included', sp.id is not null, 'role', sp.role, 'active', coalesce(sp.active, true)
+    ) order by p.joined_at), '[]'::json)
+    from players p
+    left join saboteur_participants sp
+      on sp.player_id = p.id and sp.saboteur_game_id = v_sabgame.id
+    where p.game_id = v_game.id
+  );
+end $$;
+
+-- p_assignments: jsonb array of {"player_id": uuid, "role": "SABOTEUR"|"LOYAL"|null}.
+-- role = null removes that player from the Skjult agenda. Draft-only.
+create or replace function host_set_participants(p_host_token uuid, p_saboteur_game_id uuid, p_assignments jsonb)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_game      games;
+  v_sabgame   saboteur_games;
+  v_item      jsonb;
+  v_player_id uuid;
+  v_role      text;
+  v_count     int := 0;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  v_game := _host_game(p_host_token);
+  v_sabgame := _saboteur_game_for_host(p_host_token, p_saboteur_game_id);
+
+  if v_sabgame.status <> 'draft' then
+    raise exception 'Roller kan bare endres mens spillet er i utkast';
+  end if;
+
+  for v_item in select * from jsonb_array_elements(coalesce(p_assignments, '[]'::jsonb))
+  loop
+    v_player_id := (v_item ->> 'player_id')::uuid;
+    v_role := nullif(v_item ->> 'role', '');
+
+    perform 1 from players where id = v_player_id and game_id = v_game.id;
+    if not found then
+      raise exception 'Ukjent spiller i denne festen';
+    end if;
+
+    if v_role is null then
+      delete from saboteur_participants where saboteur_game_id = v_sabgame.id and player_id = v_player_id;
+    else
+      if v_role not in ('SABOTEUR', 'LOYAL') then
+        raise exception 'Ukjent rolle: %', v_role;
+      end if;
+      insert into saboteur_participants (saboteur_game_id, player_id, role)
+      values (v_sabgame.id, v_player_id, v_role)
+      on conflict (saboteur_game_id, player_id) do update set role = excluded.role, active = true;
+    end if;
+    v_count := v_count + 1;
+  end loop;
+
+  perform _saboteur_audit(v_sabgame.id, 'set_participants', p_assignments);
+  return json_build_object('ok', true, 'processed', v_count);
+end $$;
+
+create or replace function host_set_participant_active(p_host_token uuid, p_saboteur_game_id uuid, p_player_id uuid, p_active boolean)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_sabgame saboteur_games;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  perform _host_game(p_host_token);
+  v_sabgame := _saboteur_game_for_host(p_host_token, p_saboteur_game_id);
+
+  update saboteur_participants set active = coalesce(p_active, true)
+  where saboteur_game_id = v_sabgame.id and player_id = p_player_id;
+  if not found then
+    raise exception 'Ukjent deltaker';
+  end if;
+
+  perform _saboteur_audit(v_sabgame.id, 'set_participant_active', jsonb_build_object('player_id', p_player_id, 'active', p_active));
+  return json_build_object('ok', true);
+end $$;
+
+create or replace function host_set_know_each_other(p_host_token uuid, p_saboteur_game_id uuid, p_enabled boolean)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_sabgame saboteur_games;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  perform _host_game(p_host_token);
+  v_sabgame := _saboteur_game_for_host(p_host_token, p_saboteur_game_id);
+
+  if v_sabgame.status in ('ended', 'archived') then
+    raise exception 'Spillet er avsluttet';
+  end if;
+
+  update saboteur_games set know_each_other = coalesce(p_enabled, false), updated_at = now() where id = v_sabgame.id;
+  perform _saboteur_audit(v_sabgame.id, 'set_know_each_other', jsonb_build_object('enabled', p_enabled));
+  return json_build_object('ok', true);
+end $$;
+
+create or replace function host_set_show_leaderboard(p_host_token uuid, p_saboteur_game_id uuid, p_enabled boolean)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_sabgame saboteur_games;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  perform _host_game(p_host_token);
+  v_sabgame := _saboteur_game_for_host(p_host_token, p_saboteur_game_id);
+
+  update saboteur_games set show_leaderboard = coalesce(p_enabled, false), updated_at = now() where id = v_sabgame.id;
+  perform _saboteur_audit(v_sabgame.id, 'set_show_leaderboard', jsonb_build_object('enabled', p_enabled));
+  return json_build_object('ok', true);
+end $$;
+
+create or replace function host_set_saboteur_status(p_host_token uuid, p_saboteur_game_id uuid, p_status text)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_sabgame saboteur_games;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  perform _host_game(p_host_token);
+  v_sabgame := _saboteur_game_for_host(p_host_token, p_saboteur_game_id);
+
+  perform _saboteur_apply_transition(v_sabgame.id, p_status);
+  return json_build_object('ok', true, 'status', p_status);
+end $$;
+
+create or replace function host_end_saboteur_game(p_host_token uuid, p_saboteur_game_id uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_sabgame saboteur_games;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  perform _host_game(p_host_token);
+  v_sabgame := _saboteur_game_for_host(p_host_token, p_saboteur_game_id);
+
+  perform _saboteur_apply_transition(v_sabgame.id, 'ended');
+  return json_build_object('ok', true);
+end $$;
+
+create or replace function host_archive_saboteur_game(p_host_token uuid, p_saboteur_game_id uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_sabgame saboteur_games;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  perform _host_game(p_host_token);
+  v_sabgame := _saboteur_game_for_host(p_host_token, p_saboteur_game_id);
+
+  perform _saboteur_apply_transition(v_sabgame.id, 'archived');
+  return json_build_object('ok', true);
+end $$;
+
+create or replace function host_upsert_objective(
+  p_host_token uuid, p_saboteur_game_id uuid, p_objective_id uuid default null,
+  p_participant_id uuid default null, p_title text default null, p_description text default null,
+  p_points int default 0, p_expires_at timestamptz default null
+)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_sabgame saboteur_games;
+  v_id      uuid;
+  v_title   text := trim(coalesce(p_title, ''));
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  perform _host_game(p_host_token);
+  v_sabgame := _saboteur_game_for_host(p_host_token, p_saboteur_game_id);
+
+  if v_sabgame.status in ('ended', 'archived') then
+    raise exception 'Spillet er avsluttet';
+  end if;
+
+  if p_objective_id is null then
+    if v_title = '' then
+      raise exception 'Målet trenger en tittel';
+    end if;
+    perform 1 from saboteur_participants
+      where id = p_participant_id and saboteur_game_id = v_sabgame.id and role = 'SABOTEUR';
+    if not found then
+      raise exception 'Målet må tildeles en Sabotør i dette spillet';
+    end if;
+
+    insert into saboteur_objectives (saboteur_game_id, assigned_participant_id, title, description, points, expires_at)
+    values (v_sabgame.id, p_participant_id, v_title, coalesce(p_description, ''), coalesce(p_points, 0), p_expires_at)
+    returning id into v_id;
+  else
+    update saboteur_objectives set
+      title       = coalesce(nullif(trim(p_title), ''), title),
+      description = coalesce(p_description, description),
+      points      = coalesce(p_points, points),
+      expires_at  = coalesce(p_expires_at, expires_at)
+    where id = p_objective_id and saboteur_game_id = v_sabgame.id;
+    if not found then
+      raise exception 'Ukjent mål';
+    end if;
+    v_id := p_objective_id;
+  end if;
+
+  perform _saboteur_audit(v_sabgame.id, 'objective_upsert', jsonb_build_object('objective_id', v_id));
+  return json_build_object('ok', true, 'id', v_id);
+end $$;
+
+create or replace function host_decide_objective_claim(p_host_token uuid, p_saboteur_game_id uuid, p_objective_id uuid, p_approve boolean)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_sabgame  saboteur_games;
+  v_obj      saboteur_objectives;
+  v_rowcount int := 0;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  perform _host_game(p_host_token);
+  v_sabgame := _saboteur_game_for_host(p_host_token, p_saboteur_game_id);
+
+  select * into v_obj from saboteur_objectives where id = p_objective_id and saboteur_game_id = v_sabgame.id;
+  if not found then
+    raise exception 'Ukjent mål';
+  end if;
+
+  if v_obj.status in ('approved', 'rejected') then
+    -- Already decided: idempotent no-op. Retries can never re-score or re-flip.
+    return json_build_object('ok', true, 'status', v_obj.status, 'already_decided', true);
+  end if;
+  if v_obj.status <> 'claimed' then
+    raise exception 'Målet er ikke krevd av Sabotøren ennå';
+  end if;
+
+  if p_approve then
+    update saboteur_objectives set status = 'approved', decided_at = now() where id = v_obj.id;
+    insert into saboteur_points_ledger (participant_id, source_type, source_id, points)
+    values (v_obj.assigned_participant_id, 'objective', v_obj.id, v_obj.points)
+    on conflict (source_type, source_id) where source_id is not null do nothing;
+    get diagnostics v_rowcount = row_count;
+  else
+    update saboteur_objectives set status = 'rejected', decided_at = now() where id = v_obj.id;
+  end if;
+
+  perform _saboteur_audit(v_sabgame.id, 'objective_decided',
+    jsonb_build_object('objective_id', v_obj.id, 'approved', p_approve, 'points_awarded', v_rowcount > 0));
+  return json_build_object('ok', true, 'status', case when p_approve then 'approved' else 'rejected' end,
+    'points_awarded', v_rowcount > 0);
+end $$;
+
+create or replace function host_upsert_task(
+  p_host_token uuid, p_saboteur_game_id uuid, p_task_id uuid default null,
+  p_participant_id uuid default null, p_title text default null, p_description text default null,
+  p_hint_text text default null, p_hint_audience text default 'assignee'
+)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_sabgame  saboteur_games;
+  v_id       uuid;
+  v_title    text := trim(coalesce(p_title, ''));
+  v_audience text := coalesce(p_hint_audience, 'assignee');
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  perform _host_game(p_host_token);
+  v_sabgame := _saboteur_game_for_host(p_host_token, p_saboteur_game_id);
+
+  if v_sabgame.status in ('ended', 'archived') then
+    raise exception 'Spillet er avsluttet';
+  end if;
+  if v_audience not in ('assignee', 'all_loyal') then
+    raise exception 'Ukjent mottakergruppe for hintet';
+  end if;
+
+  if p_task_id is null then
+    if v_title = '' then
+      raise exception 'Oppgaven trenger en tittel';
+    end if;
+    perform 1 from saboteur_participants
+      where id = p_participant_id and saboteur_game_id = v_sabgame.id and role = 'LOYAL';
+    if not found then
+      raise exception 'Oppgaven må tildeles en Lojal i dette spillet';
+    end if;
+
+    insert into saboteur_tasks (saboteur_game_id, assigned_participant_id, title, description, hint_text, hint_audience)
+    values (v_sabgame.id, p_participant_id, v_title, coalesce(p_description, ''), coalesce(p_hint_text, ''), v_audience)
+    returning id into v_id;
+  else
+    update saboteur_tasks set
+      title         = coalesce(nullif(trim(p_title), ''), title),
+      description   = coalesce(p_description, description),
+      hint_text     = coalesce(p_hint_text, hint_text),
+      hint_audience = coalesce(p_hint_audience, hint_audience)
+    where id = p_task_id and saboteur_game_id = v_sabgame.id;
+    if not found then
+      raise exception 'Ukjent oppgave';
+    end if;
+    v_id := p_task_id;
+  end if;
+
+  perform _saboteur_audit(v_sabgame.id, 'task_upsert', jsonb_build_object('task_id', v_id));
+  return json_build_object('ok', true, 'id', v_id);
+end $$;
+
+create or replace function host_decide_task_claim(p_host_token uuid, p_saboteur_game_id uuid, p_task_id uuid, p_approve boolean)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_sabgame  saboteur_games;
+  v_task     saboteur_tasks;
+  v_released int := 0;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  perform _host_game(p_host_token);
+  v_sabgame := _saboteur_game_for_host(p_host_token, p_saboteur_game_id);
+
+  select * into v_task from saboteur_tasks where id = p_task_id and saboteur_game_id = v_sabgame.id;
+  if not found then
+    raise exception 'Ukjent oppgave';
+  end if;
+
+  if v_task.status in ('approved', 'rejected') then
+    return json_build_object('ok', true, 'status', v_task.status, 'already_decided', true);
+  end if;
+  if v_task.status <> 'claimed' then
+    raise exception 'Oppgaven er ikke krevd av spilleren ennå';
+  end if;
+
+  if p_approve then
+    update saboteur_tasks set status = 'approved', decided_at = now() where id = v_task.id;
+
+    if v_task.hint_audience = 'all_loyal' then
+      insert into saboteur_hint_releases (task_id, released_to_participant_id)
+      select v_task.id, sp.id from saboteur_participants sp
+      where sp.saboteur_game_id = v_sabgame.id and sp.role = 'LOYAL' and sp.active
+      on conflict (task_id, released_to_participant_id) do nothing;
+    else
+      insert into saboteur_hint_releases (task_id, released_to_participant_id)
+      values (v_task.id, v_task.assigned_participant_id)
+      on conflict (task_id, released_to_participant_id) do nothing;
+    end if;
+    get diagnostics v_released = row_count;
+  else
+    update saboteur_tasks set status = 'rejected', decided_at = now() where id = v_task.id;
+  end if;
+
+  perform _saboteur_audit(v_sabgame.id, 'task_decided',
+    jsonb_build_object('task_id', v_task.id, 'approved', p_approve, 'hints_released', v_released));
+  return json_build_object('ok', true, 'status', case when p_approve then 'approved' else 'rejected' end);
+end $$;
+
+create or replace function host_open_voting_round(p_host_token uuid, p_saboteur_game_id uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_sabgame saboteur_games;
+  v_round   saboteur_voting_rounds;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  perform _host_game(p_host_token);
+  v_sabgame := _saboteur_game_for_host(p_host_token, p_saboteur_game_id);
+
+  if v_sabgame.status <> 'active' then
+    raise exception 'Spillet må være aktivt for å åpne en avstemning';
+  end if;
+
+  begin
+    insert into saboteur_voting_rounds (saboteur_game_id) values (v_sabgame.id) returning * into v_round;
+  exception when unique_violation then
+    raise exception 'Det er allerede en åpen avstemningsrunde';
+  end;
+
+  update saboteur_games set status = 'voting', updated_at = now() where id = v_sabgame.id;
+  perform _saboteur_audit(v_sabgame.id, 'voting_opened', jsonb_build_object('round_id', v_round.id));
+  return json_build_object('ok', true, 'round_id', v_round.id);
+end $$;
+
+create or replace function host_close_voting_round(p_host_token uuid, p_saboteur_game_id uuid, p_round_id uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_sabgame saboteur_games;
+  v_round   saboteur_voting_rounds;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  perform _host_game(p_host_token);
+  v_sabgame := _saboteur_game_for_host(p_host_token, p_saboteur_game_id);
+
+  select * into v_round from saboteur_voting_rounds where id = p_round_id and saboteur_game_id = v_sabgame.id;
+  if not found then
+    raise exception 'Ukjent avstemningsrunde';
+  end if;
+  if v_round.status <> 'open' then
+    raise exception 'Runden er ikke åpen';
+  end if;
+
+  update saboteur_voting_rounds set status = 'closed', closed_at = now() where id = v_round.id;
+  update saboteur_games set status = 'active', updated_at = now() where id = v_sabgame.id;
+  perform _saboteur_audit(v_sabgame.id, 'voting_closed', jsonb_build_object('round_id', v_round.id));
+  return json_build_object('ok', true);
+end $$;
+
+create or replace function host_reveal_voting_round(p_host_token uuid, p_saboteur_game_id uuid, p_round_id uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_sabgame saboteur_games;
+  v_round   saboteur_voting_rounds;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  perform _host_game(p_host_token);
+  v_sabgame := _saboteur_game_for_host(p_host_token, p_saboteur_game_id);
+
+  select * into v_round from saboteur_voting_rounds where id = p_round_id and saboteur_game_id = v_sabgame.id;
+  if not found then
+    raise exception 'Ukjent avstemningsrunde';
+  end if;
+  if v_round.status <> 'closed' then
+    raise exception 'Lukk runden før den kan avsløres';
+  end if;
+
+  update saboteur_voting_rounds set status = 'revealed', revealed_at = now() where id = v_round.id;
+  perform _saboteur_audit(v_sabgame.id, 'voting_revealed', jsonb_build_object('round_id', v_round.id));
+  return json_build_object('ok', true);
+end $$;
+
+-- The full control-panel read. Host sees every role/task/claim/hint/score;
+-- vote TARGET-level tally only once the round is both closed and revealed
+-- (see the header comment on vote secrecy) — a live ballot count is shown
+-- while a round is open so the host knows when to close it.
+create or replace function host_get_saboteur_game(p_host_token uuid, p_saboteur_game_id uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_sabgame saboteur_games;
+  v_round   saboteur_voting_rounds;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  perform _host_game(p_host_token);
+  v_sabgame := _saboteur_game_for_host(p_host_token, p_saboteur_game_id);
+
+  select * into v_round from saboteur_voting_rounds
+  where saboteur_game_id = v_sabgame.id order by opened_at desc limit 1;
+
+  return json_build_object(
+    'id', v_sabgame.id, 'status', v_sabgame.status,
+    'know_each_other', v_sabgame.know_each_other, 'show_leaderboard', v_sabgame.show_leaderboard,
+    'created_at', v_sabgame.created_at,
+
+    'participants', (
+      select coalesce(json_agg(json_build_object(
+        'id', sp.id, 'player_id', sp.player_id, 'display_name', p.display_name,
+        'role', sp.role, 'active', sp.active,
+        'points', (select coalesce(sum(pl.points), 0) from saboteur_points_ledger pl where pl.participant_id = sp.id)
+      ) order by p.joined_at), '[]'::json)
+      from saboteur_participants sp join players p on p.id = sp.player_id
+      where sp.saboteur_game_id = v_sabgame.id
+    ),
+
+    'objectives', (
+      select coalesce(json_agg(json_build_object(
+        'id', o.id, 'participant_id', o.assigned_participant_id, 'title', o.title,
+        'description', o.description, 'points', o.points, 'expires_at', o.expires_at,
+        'status', o.status, 'claimed_at', o.claimed_at, 'decided_at', o.decided_at
+      ) order by o.created_at), '[]'::json)
+      from saboteur_objectives o where o.saboteur_game_id = v_sabgame.id
+    ),
+
+    'tasks', (
+      select coalesce(json_agg(json_build_object(
+        'id', t.id, 'participant_id', t.assigned_participant_id, 'title', t.title,
+        'description', t.description, 'hint_text', t.hint_text, 'hint_audience', t.hint_audience,
+        'status', t.status, 'claimed_at', t.claimed_at, 'decided_at', t.decided_at
+      ) order by t.created_at), '[]'::json)
+      from saboteur_tasks t where t.saboteur_game_id = v_sabgame.id
+    ),
+
+    'current_round', case when v_round.id is null then null else json_build_object(
+      'id', v_round.id, 'status', v_round.status,
+      'opened_at', v_round.opened_at, 'closed_at', v_round.closed_at, 'revealed_at', v_round.revealed_at,
+      'ballot_count', (select count(*) from saboteur_ballots b where b.voting_round_id = v_round.id),
+      'tally', case when v_round.status = 'revealed' then (
+        select coalesce(json_agg(json_build_object(
+          'participant_id', t.target_participant_id, 'display_name', p.display_name, 'votes', t.votes
+        ) order by t.votes desc), '[]'::json)
+        from (
+          select target_participant_id, count(*) as votes
+          from saboteur_ballots where voting_round_id = v_round.id
+          group by target_participant_id
+        ) t
+        join saboteur_participants sp on sp.id = t.target_participant_id
+        join players p on p.id = sp.player_id
+      ) else null end
+    ) end
+  );
+end $$;
+
+create or replace function host_get_saboteur_audit(p_host_token uuid, p_saboteur_game_id uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_sabgame saboteur_games;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  perform _host_game(p_host_token);
+  v_sabgame := _saboteur_game_for_host(p_host_token, p_saboteur_game_id);
+
+  return (
+    select coalesce(json_agg(json_build_object(
+      'id', a.id, 'actor', a.actor, 'action', a.action, 'payload', a.payload, 'created_at', a.created_at
+    ) order by a.id), '[]'::json)
+    from saboteur_audit_log a where a.saboteur_game_id = v_sabgame.id
+  );
+end $$;
+
+-- ----------------------------------------------------------------------------
+-- 5) RPC: SPILLERE (player_token; NEVER returns another participant's role,
+--    objectives, tasks, hints, or any ballot data)
+-- ----------------------------------------------------------------------------
+
+create or replace function get_my_saboteur_brief(p_player_token uuid, p_saboteur_game_id uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_part    saboteur_participants;
+  v_sabgame saboteur_games;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  v_part := _saboteur_participant_for_player(p_player_token, p_saboteur_game_id);
+  select * into v_sabgame from saboteur_games where id = v_part.saboteur_game_id;
+
+  return json_build_object(
+    'saboteur_game_id', v_sabgame.id, 'status', v_sabgame.status,
+    'my_role', v_part.role, 'my_active', v_part.active,
+
+    'fellow_saboteurs', case when v_part.role = 'SABOTEUR' and v_sabgame.know_each_other then (
+      select coalesce(json_agg(json_build_object('display_name', p.display_name)), '[]'::json)
+      from saboteur_participants sp join players p on p.id = sp.player_id
+      where sp.saboteur_game_id = v_sabgame.id and sp.role = 'SABOTEUR' and sp.id <> v_part.id
+    ) else '[]'::json end,
+
+    'objectives', case when v_part.role = 'SABOTEUR' then (
+      select coalesce(json_agg(json_build_object(
+        'id', o.id, 'title', o.title, 'description', o.description, 'points', o.points,
+        'expires_at', o.expires_at, 'status', o.status
+      ) order by o.created_at), '[]'::json)
+      from saboteur_objectives o where o.assigned_participant_id = v_part.id
+    ) else '[]'::json end,
+
+    'tasks', case when v_part.role = 'LOYAL' then (
+      select coalesce(json_agg(json_build_object(
+        'id', t.id, 'title', t.title, 'description', t.description, 'status', t.status
+      ) order by t.created_at), '[]'::json)
+      from saboteur_tasks t where t.assigned_participant_id = v_part.id
+    ) else '[]'::json end,
+
+    -- Only rows explicitly released to ME (see host_decide_task_claim) —
+    -- never derived generically from "am I Lojal", so an all_loyal release
+    -- for one task never leaks a DIFFERENT task's hint to the same player.
+    'hints', (
+      select coalesce(json_agg(json_build_object(
+        'task_id', hr.task_id, 'hint_text', t.hint_text, 'released_at', hr.created_at
+      ) order by hr.created_at), '[]'::json)
+      from saboteur_hint_releases hr join saboteur_tasks t on t.id = hr.task_id
+      where hr.released_to_participant_id = v_part.id
+    ),
+
+    'reveal', case when v_sabgame.status = 'ended' then json_build_object(
+      'participants', (
+        select coalesce(json_agg(json_build_object('display_name', p.display_name, 'role', sp.role) order by p.display_name), '[]'::json)
+        from saboteur_participants sp join players p on p.id = sp.player_id
+        where sp.saboteur_game_id = v_sabgame.id
+      ),
+      'my_points', (select coalesce(sum(pl.points), 0) from saboteur_points_ledger pl where pl.participant_id = v_part.id),
+      'leaderboard', case when v_sabgame.show_leaderboard then (
+        select coalesce(json_agg(json_build_object('display_name', x.display_name, 'points', x.points) order by x.points desc), '[]'::json)
+        from (
+          select p.display_name, coalesce(sum(pl.points), 0) as points
+          from saboteur_participants sp
+          join players p on p.id = sp.player_id
+          left join saboteur_points_ledger pl on pl.participant_id = sp.id
+          where sp.saboteur_game_id = v_sabgame.id
+          group by sp.id, p.display_name
+        ) x
+      ) else null end
+    ) else null end
+  );
+end $$;
+
+create or replace function get_my_saboteur_vote_status(p_player_token uuid, p_saboteur_game_id uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_part  saboteur_participants;
+  v_round saboteur_voting_rounds;
+  v_voted boolean := false;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  v_part := _saboteur_participant_for_player(p_player_token, p_saboteur_game_id);
+
+  select * into v_round from saboteur_voting_rounds
+  where saboteur_game_id = p_saboteur_game_id and status = 'open' limit 1;
+
+  if v_round.id is not null then
+    select exists(
+      select 1 from saboteur_ballots where voting_round_id = v_round.id and voter_participant_id = v_part.id
+    ) into v_voted;
+  end if;
+
+  return json_build_object(
+    'can_vote', v_round.id is not null and v_part.role = 'LOYAL' and v_part.active and not v_voted,
+    'round_open', v_round.id is not null, 'round_id', v_round.id, 'already_voted', v_voted
+  );
+end $$;
+
+create or replace function get_saboteur_ballot_targets(p_player_token uuid, p_saboteur_game_id uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_part  saboteur_participants;
+  v_round saboteur_voting_rounds;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  v_part := _saboteur_participant_for_player(p_player_token, p_saboteur_game_id);
+
+  select * into v_round from saboteur_voting_rounds
+  where saboteur_game_id = p_saboteur_game_id and status = 'open' limit 1;
+
+  if v_round.id is null or v_part.role <> 'LOYAL' or not v_part.active then
+    return '[]'::json;
+  end if;
+
+  return (
+    select coalesce(json_agg(json_build_object('participant_id', sp.id, 'display_name', p.display_name) order by p.display_name), '[]'::json)
+    from saboteur_participants sp join players p on p.id = sp.player_id
+    where sp.saboteur_game_id = p_saboteur_game_id and sp.active
+  );
+end $$;
+
+create or replace function cast_saboteur_ballot(p_player_token uuid, p_saboteur_game_id uuid, p_round_id uuid, p_target_participant_id uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_part  saboteur_participants;
+  v_round saboteur_voting_rounds;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  v_part := _saboteur_participant_for_player(p_player_token, p_saboteur_game_id);
+
+  if v_part.role <> 'LOYAL' or not v_part.active then
+    raise exception 'Du kan ikke stemme i denne avstemningen';
+  end if;
+
+  select * into v_round from saboteur_voting_rounds
+  where id = p_round_id and saboteur_game_id = p_saboteur_game_id and status = 'open';
+  if not found then
+    raise exception 'Avstemningen er ikke åpen';
+  end if;
+
+  perform 1 from saboteur_participants
+  where id = p_target_participant_id and saboteur_game_id = p_saboteur_game_id and active;
+  if not found then
+    raise exception 'Ukjent stemmemål';
+  end if;
+
+  begin
+    insert into saboteur_ballots (voting_round_id, voter_participant_id, target_participant_id)
+    values (v_round.id, v_part.id, p_target_participant_id);
+  exception when unique_violation then
+    raise exception 'Du har allerede stemt i denne runden';
+  end;
+
+  return json_build_object('ok', true);
+end $$;
+
+create or replace function claim_saboteur_objective(p_player_token uuid, p_saboteur_game_id uuid, p_objective_id uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_part saboteur_participants;
+  v_obj  saboteur_objectives;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  v_part := _saboteur_participant_for_player(p_player_token, p_saboteur_game_id);
+
+  select * into v_obj from saboteur_objectives where id = p_objective_id and assigned_participant_id = v_part.id;
+  if not found then
+    raise exception 'Fant ikke målet';
+  end if;
+
+  if v_obj.status = 'assigned' then
+    if v_obj.expires_at is not null and now() > v_obj.expires_at then
+      raise exception 'Fristen for dette målet er utløpt';
+    end if;
+    update saboteur_objectives set status = 'claimed', claimed_at = now() where id = v_obj.id;
+    return json_build_object('ok', true, 'status', 'claimed');
+  end if;
+
+  -- Idempotent: already claimed/approved/rejected — return current status, no-op.
+  return json_build_object('ok', true, 'status', v_obj.status);
+end $$;
+
+create or replace function claim_saboteur_task(p_player_token uuid, p_saboteur_game_id uuid, p_task_id uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_part saboteur_participants;
+  v_task saboteur_tasks;
+begin
+  if not _saboteur_enabled() then raise exception 'Skjult agenda er ikke slått på'; end if;
+  v_part := _saboteur_participant_for_player(p_player_token, p_saboteur_game_id);
+
+  select * into v_task from saboteur_tasks where id = p_task_id and assigned_participant_id = v_part.id;
+  if not found then
+    raise exception 'Fant ikke oppgaven';
+  end if;
+
+  if v_task.status = 'assigned' then
+    update saboteur_tasks set status = 'claimed', claimed_at = now() where id = v_task.id;
+    return json_build_object('ok', true, 'status', 'claimed');
+  end if;
+
+  return json_build_object('ok', true, 'status', v_task.status);
+end $$;
+
+-- ----------------------------------------------------------------------------
+-- 6) EXECUTE-RETTIGHETER (explicit grants, matching this schema's convention
+--    of granting broadly to anon+authenticated — the secret token is what
+--    actually gates access, not the Postgres role)
+-- ----------------------------------------------------------------------------
+
+grant execute on function host_create_saboteur_game(uuid, boolean) to anon, authenticated;
+grant execute on function host_list_eligible_participants(uuid, uuid) to anon, authenticated;
+grant execute on function host_set_participants(uuid, uuid, jsonb) to anon, authenticated;
+grant execute on function host_set_participant_active(uuid, uuid, uuid, boolean) to anon, authenticated;
+grant execute on function host_set_know_each_other(uuid, uuid, boolean) to anon, authenticated;
+grant execute on function host_set_show_leaderboard(uuid, uuid, boolean) to anon, authenticated;
+grant execute on function host_set_saboteur_status(uuid, uuid, text) to anon, authenticated;
+grant execute on function host_end_saboteur_game(uuid, uuid) to anon, authenticated;
+grant execute on function host_archive_saboteur_game(uuid, uuid) to anon, authenticated;
+grant execute on function host_upsert_objective(uuid, uuid, uuid, uuid, text, text, int, timestamptz) to anon, authenticated;
+grant execute on function host_decide_objective_claim(uuid, uuid, uuid, boolean) to anon, authenticated;
+grant execute on function host_upsert_task(uuid, uuid, uuid, uuid, text, text, text, text) to anon, authenticated;
+grant execute on function host_decide_task_claim(uuid, uuid, uuid, boolean) to anon, authenticated;
+grant execute on function host_open_voting_round(uuid, uuid) to anon, authenticated;
+grant execute on function host_close_voting_round(uuid, uuid, uuid) to anon, authenticated;
+grant execute on function host_reveal_voting_round(uuid, uuid, uuid) to anon, authenticated;
+grant execute on function host_get_saboteur_game(uuid, uuid) to anon, authenticated;
+grant execute on function host_get_saboteur_audit(uuid, uuid) to anon, authenticated;
+
+grant execute on function get_my_saboteur_brief(uuid, uuid) to anon, authenticated;
+grant execute on function get_my_saboteur_vote_status(uuid, uuid) to anon, authenticated;
+grant execute on function get_saboteur_ballot_targets(uuid, uuid) to anon, authenticated;
+grant execute on function cast_saboteur_ballot(uuid, uuid, uuid, uuid) to anon, authenticated;
+grant execute on function claim_saboteur_objective(uuid, uuid, uuid) to anon, authenticated;
+grant execute on function claim_saboteur_task(uuid, uuid, uuid) to anon, authenticated;
+
+-- ==========================================================================
+-- ▼ 00010_saboteur_discovery.sql
+-- ==========================================================================
+
+-- ============================================================================
+-- MIGRASJON 00010 — Skjult agenda: spillerens oppdagelses-RPC
+--
+-- Gap found while wiring the player view: the HOST gets a saboteur_game_id
+-- back from host_create_saboteur_game and can store it locally. A PLAYER has
+-- no such id to start from — their phone only has a player_token. This RPC
+-- lets a player's own device discover "is there a (non-archived) Skjult
+-- agenda for my party, and what's its id" so it can then call
+-- get_my_saboteur_brief with that id.
+--
+-- Safe to expose: it reveals only that a saboteur_game exists for the
+-- caller's OWN party (same non-sensitive class of fact as "this party has a
+-- murder-mystery running") — no role, no participant list, no objectives,
+-- no votes. Whether the caller is actually a participant is still decided
+-- entirely by get_my_saboteur_brief afterward, via the existing
+-- _saboteur_participant_for_player guard.
+--
+-- Idempotent (safe to re-run).
+-- ============================================================================
+
+create or replace function get_my_saboteur_game_id(p_player_token uuid)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_player players;
+  v_sabgame saboteur_games;
+begin
+  if not _saboteur_enabled() then
+    raise exception 'Skjult agenda er ikke slått på';
+  end if;
+  v_player := _player(p_player_token);
+
+  select * into v_sabgame from saboteur_games
+  where game_id = v_player.game_id and status <> 'archived'
+  order by created_at desc
+  limit 1;
+
+  return json_build_object('saboteur_game_id', v_sabgame.id);
+end $$;
+
+grant execute on function get_my_saboteur_game_id(uuid) to anon, authenticated;
+
+-- ==========================================================================
+-- ▼ 00011_saboteur_standalone.sql
+-- ==========================================================================
+
+-- ============================================================================
+-- MIGRASJON 00011 — Skjult agenda blir et FRITTSTÅENDE spill
+--
+-- Erstatter modellen fra 00009/00010, der Skjult agenda levde inni en
+-- eksisterende mordmysterie-fest (saboteur_games.game_id -> games.id, og
+-- deltakerne var players-rader). Nå er Skjult agenda sitt eget spill med
+-- sin egen firetegns kode, sin egen vertsnøkkel og sine egne spillere.
+--
+-- HVA DET BETYR I PRAKSIS:
+--   Før:  vert starter mordmysterium -> gjester blir med -> vert åpner en
+--         «Skjult agenda»-fane inni den festen.
+--   Nå:   hvem som helst starter et Skjult agenda-spill på /skjult.html og
+--         får en egen kode -> gjester blir med med DEN koden. Mordmysteriet
+--         er ikke involvert i det hele tatt.
+--
+-- ADVARSEL OM DATA: denne migrasjonen sletter alle Skjult agenda-tabeller
+-- fra 00009/00010 og bygger dem opp på nytt. Det er trygt her fordi
+-- funksjonen aldri har vært skrudd på (app_feature_flags-raden har stått
+-- på false siden den ble laget, og hver eneste RPC nekter når den er av) —
+-- så det finnes ingen ekte spilldata å miste. Mordmysteriet sine tabeller
+-- (games/players/suspects/polaroids/mysteries/profiles) røres ALDRI.
+--
+-- SIKKERHETSMODELLEN ER UENDRET og følger resten av skjemaet:
+--   - Funksjonsflagget app_feature_flags('SABOTEUR_GAME_ENABLED') sjekkes
+--     som FØRSTE setning i hver eneste RPC, før noen token slås opp. Av som
+--     standard. Et gjettet API-kall kan ikke slå på eller utforske noe.
+--   - RLS på alle tabeller, ZERO policies, alle grants trukket tilbake fra
+--     anon/authenticated. All tilgang via SECURITY DEFINER-RPC-er som
+--     bygger minimale, mottaker-spesifikke JSON-svar for hånd.
+--   - Nye hjelpere _saboteur_host/_saboteur_me speiler _host_game/_player:
+--     tokenet identifiserer BÅDE hvem du er og hvilket spill du er i, så
+--     det finnes ingen spill-id å tukle med utenfra.
+--
+-- Trygg å kjøre flere ganger.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -2775,13 +4853,37 @@ grant execute on function cast_saboteur_ballot(uuid, uuid, uuid) to anon, authen
 grant execute on function claim_saboteur_objective(uuid, uuid) to anon, authenticated;
 grant execute on function claim_saboteur_task(uuid, uuid) to anon, authenticated;
 
--- ----------------------------------------------------------------------------
--- Skjult agenda + vertskonto: la en innlogget vert liste og gjenoppta sine
--- egne spill (se supabase/migrations/00012_saboteur_account.sql). Uten dette
--- lever vertsnøkkelen kun i localStorage, og spillet er tapt om enheten
--- tømmes. Begge krever innlogging og returnerer kun kallerens egne spill.
--- ----------------------------------------------------------------------------
+-- ==========================================================================
+-- ▼ 00012_saboteur_account.sql
+-- ==========================================================================
 
+-- ============================================================================
+-- MIGRASJON 00012 — Skjult agenda: knytt spill til vertskontoen
+--
+-- Problemet dette løser: vertsnøkkelen har bare ligget i localStorage. Bytter
+-- verten telefon, tømmer nettleseren eller åpner spillet i inkognito, er
+-- spillet borte for godt — selv om det står og går fint i databasen.
+--
+-- Med innlogging får verten samme opplevelse som resten av appen: spillene
+-- dine følger kontoen din, ikke enheten. create_saboteur_game setter allerede
+-- owner_id = auth.uid() (fra 00011), så det som mangler er å kunne LISTE og
+-- GJENOPPTA dem — pluss å kunne knytte til et spill man laget før man logget inn.
+--
+-- Sikkerhet:
+--   - Begge funksjonene krever innlogging (auth.uid() må finnes).
+--   - owner_list_saboteur_games returnerer KUN rader der owner_id = auth.uid().
+--     Den returnerer host_token for disse — det er trygt, for det er nettopp
+--     verten sitt eget spill; nøkkelen er den samme de allerede hadde lokalt.
+--   - owner_claim_saboteur_game krever at du oppgir host_token. Den som har
+--     vertsnøkkelen kontrollerer allerede spillet fullt ut, så å la dem knytte
+--     det til egen konto gir ingen ny tilgang. Et spill som allerede eies av
+--     en ANNEN konto kan ikke overtas.
+--   - Som alt annet her: funksjonsflagget sjekkes først.
+--
+-- Trygg å kjøre flere ganger.
+-- ============================================================================
+
+-- Mine Skjult agenda-spill (krever innlogging).
 create or replace function owner_list_saboteur_games()
 returns json
 language plpgsql security definer set search_path = public
@@ -2809,6 +4911,7 @@ begin
   );
 end $$;
 
+-- Knytt et spill du allerede har vertsnøkkelen til, til kontoen din.
 create or replace function owner_claim_saboteur_game(p_host_token uuid)
 returns json
 language plpgsql security definer set search_path = public
@@ -2836,18 +4939,15 @@ end $$;
 grant execute on function owner_list_saboteur_games() to authenticated;
 grant execute on function owner_claim_saboteur_game(uuid) to authenticated;
 
+-- ==========================================================================
+-- ▼ 00013_saboteur_pins_phases.sql
+-- ==========================================================================
+
 -- ============================================================================
--- 14) SENERE ENDRINGER (kjøres etter seksjonene over)
+-- MIGRASJON 00013 — Skjult agenda: unike navn, personlig PIN, regi og beskjeder
 --
--- Denne fila kjøres ovenfra og ned, så definisjonene under ERSTATTER de
--- tidligere versjonene av de samme funksjonene lenger oppe. Det er med vilje:
--- det holder fila kjørbar i én omgang på en fersk database, samtidig som
--- historikken i supabase/migrations/ viser hva som endret seg når.
+-- Fire ting, alle bedt om etter første ekte testrunde:
 --
--- Innhold: unike navn per spill/fest, personlig PIN + «kom tilbake», regi
--- (phase) og beskjeder til alle deltakere.
--- Se 00013_saboteur_pins_phases.sql og 00014_unique_player_names.sql.
--- ============================================================================
 -- 1) UNIKE NAVN per spill. To «Marius» i samme spill gjør vertskontrollen
 --    umulig å lese. Håndheves både med en unik indeks (den ekte garantien,
 --    også når to melder seg på samtidig) og med en vennlig feilmelding.
@@ -3266,6 +5366,27 @@ grant execute on function host_set_saboteur_phase(uuid, text) to anon, authentic
 grant execute on function host_publish_announcement(uuid, text) to anon, authenticated;
 grant execute on function host_delete_announcement(uuid, uuid) to anon, authenticated;
 
+-- ==========================================================================
+-- ▼ 00014_unique_player_names.sql
+-- ==========================================================================
+
+-- ============================================================================
+-- MIGRASJON 00014 — Unike gjestenavn per festkode (mordmysteriet)
+--
+-- Samme begrunnelse som for Skjult agenda: to gjester med samme navn gjør
+-- vertens spillerliste umulig å lese — man vet ikke hvem man deler ut hvilken
+-- rolle til.
+--
+-- Bevisst forsiktig her, i motsetning til i Skjult agenda: dette er en tabell
+-- med ekte fester i, som kan ha duplikater fra før. Derfor sjekkes navnet i
+-- join_game (som er den eneste veien inn i players), og det legges IKKE på en
+-- unik indeks — en indeks ville feilet på eksisterende data og blokkert hele
+-- migrasjonen. Eksisterende fester med duplikatnavn fortsetter altså å virke;
+-- det er bare nye innmeldinger som må ha unikt navn.
+--
+-- Trygg å kjøre flere ganger.
+-- ============================================================================
+
 create or replace function join_game(p_code text, p_name text)
 returns json
 language plpgsql security definer set search_path = public
@@ -3314,11 +5435,31 @@ end $$;
 
 grant execute on function join_game(text, text) to anon, authenticated;
 
--- ----------------------------------------------------------------------------
--- Beskjeder med utkast/redigering/publisering (00015_announcement_drafts.sql).
--- Erstatter host_publish_announcement lenger oppe. Utkast er kun synlige for
--- verten — get_my_saboteur_brief filtrerer på published.
--- ----------------------------------------------------------------------------
+-- ==========================================================================
+-- ▼ 00015_announcement_drafts.sql
+-- ==========================================================================
+
+-- ============================================================================
+-- MIGRASJON 00015 — Beskjeder: utkast, redigering og publisering
+--
+-- Før kunne verten bare sende en beskjed og slette den igjen. Nå har
+-- beskjeder en livssyklus, slik at man kan forberede kvelden i ro og mak:
+--
+--   skriv (utkast)  ->  rediger så mye du vil  ->  publiser  ->  evt. avpubliser
+--                                                            ->  evt. slett
+--
+-- DEN VIKTIGE REGELEN: et utkast er KUN synlig for verten. get_my_saboteur_brief
+-- filtrerer på published, så en halvferdig beskjed aldri kan lekke ut til
+-- deltakerne før verten faktisk trykker publiser.
+--
+-- Migrering av eksisterende data: beskjeder laget før denne migrasjonen var
+-- synlige i det øyeblikket de ble laget. Kolonnen får derfor default TRUE i
+-- selve ALTER-en (så gamle rader forblir publisert), og deretter settes
+-- default til FALSE for nye rader (som nå starter som utkast).
+--
+-- Trygg å kjøre flere ganger.
+-- ============================================================================
+
 alter table saboteur_announcements add column if not exists published boolean not null default true;
 alter table saboteur_announcements alter column published set default false;
 alter table saboteur_announcements add column if not exists published_at timestamptz;
@@ -3560,12 +5701,36 @@ end $$;
 grant execute on function host_upsert_announcement(uuid, uuid, text) to anon, authenticated;
 grant execute on function host_set_announcement_published(uuid, uuid, boolean) to anon, authenticated;
 
+-- ==========================================================================
+-- ▼ 00016_saboteur_intro_library.sql
+-- ==========================================================================
+
+-- ============================================================================
+-- MIGRASJON 00016 — Skjult agenda: introtekst, måbibliotek og tilfeldig tildeling
+--
+-- Tre ting:
+--
+-- 1) INTRODUKSJON. Spillet trenger en ramme før det starter: ikke vis skjermen,
+--    ikke del meldingene dine, stol på ingen. Teksten ligger på spillet (ikke
+--    hardkodet i klienten), så verten kan endre den fra nettsiden.
+--
+-- 2) MÅLBIBLIOTEK. 30 ferdige mål med poeng, så verten slipper å finne på alt
+--    selv. Biblioteket er felles og leses av alle spill; å legge til et mål
+--    KOPIERER teksten inn i spillet (samme mønster som mysterier -> fester),
+--    slik at senere endringer i biblioteket ikke påvirker et spill som er i gang.
+--
+-- 3) TILFELDIG TILDELING. Verten kan la databasen velge mottaker: send inn
+--    p_participant_id = null, så trekkes en tilfeldig aktiv Sabotør (for mål)
+--    eller Lojal (for oppgaver). Trekningen skjer server-side — klienten kan
+--    ikke påvirke hvem som blir valgt.
+--
+-- Trygg å kjøre flere ganger.
+-- ============================================================================
+
 -- ----------------------------------------------------------------------------
--- Skjult agenda: introtekst, målbibliotek (30 ferdige mål) og tilfeldig
--- tildeling av mål/oppgaver. Se 00016_saboteur_intro_library.sql.
--- Erstatter host_upsert_objective / host_upsert_task / host_get_saboteur_game /
--- get_my_saboteur_brief lenger oppe.
+-- 1) INTRODUKSJONSTEKST
 -- ----------------------------------------------------------------------------
+
 alter table saboteur_games add column if not exists intro text not null default
 'Noen blant dere har en skjult agenda. Resten er lojale — men ingen vet hvem som er hvem.
 
@@ -4046,12 +6211,33 @@ grant execute on function host_set_saboteur_intro(uuid, text) to anon, authentic
 grant execute on function list_saboteur_objective_library() to anon, authenticated;
 grant execute on function host_add_objective_from_library(uuid, uuid, uuid) to anon, authenticated;
 
--- ----------------------------------------------------------------------------
--- Hint som utløses av et fullført sabotørmål (00017_hint_trigger.sql).
--- Valgfritt: uten kobling slippes hintet ved oppgave-godkjenning som før.
--- Erstatter host_upsert_task / host_decide_task_claim /
--- host_decide_objective_claim / host_get_saboteur_game lenger oppe.
--- ----------------------------------------------------------------------------
+-- ==========================================================================
+-- ▼ 00017_hint_trigger.sql
+-- ==========================================================================
+
+-- ============================================================================
+-- MIGRASJON 00017 — Hint som utløses av et fullført sabotørmål («direkte hint»)
+--
+-- Et hint kan nå VALGFRITT knyttes til et bestemt sabotørmål. Da blir hintet
+-- et direkte spor: det slippes ikke ut i lufta, men først når den sabotasjen
+-- faktisk har skjedd og verten har godkjent den.
+--
+-- Regelen, som er lett å tenke feil om:
+--   trigger_objective_id = null  ->  som før: hintet slippes når verten
+--                                    godkjenner OPPGAVEN.
+--   trigger_objective_id satt    ->  det kreves BEGGE deler. Rekkefølgen spiller
+--                                    ingen rolle:
+--                                      • godkjennes oppgaven først, venter hintet
+--                                        til målet godkjennes
+--                                      • er målet allerede godkjent, slippes
+--                                        hintet i det oppgaven godkjennes
+--
+-- Slippet er fortsatt idempotent (unik indeks på saboteur_hint_releases), så
+-- ingen får det samme hintet to ganger uansett hvilken vei det utløses.
+--
+-- Trygg å kjøre flere ganger.
+-- ============================================================================
+
 alter table saboteur_tasks add column if not exists trigger_objective_id uuid
   references saboteur_objectives (id) on delete set null;
 
@@ -4405,10 +6591,31 @@ grant execute on function host_clear_task_trigger(uuid, uuid) to anon, authentic
 -- tvetydig for PostgREST.
 drop function if exists host_upsert_task(uuid, uuid, uuid, text, text, text, text);
 
--- ----------------------------------------------------------------------------
--- Slett sabotørmål og oppgaver (00018_delete_objectives_tasks.sql).
--- Sletting av et godkjent mål tilbakefører poengene det ga.
--- ----------------------------------------------------------------------------
+-- ==========================================================================
+-- ▼ 00018_delete_objectives_tasks.sql
+-- ==========================================================================
+
+-- ============================================================================
+-- MIGRASJON 00018 — Slett sabotørmål og oppgaver
+--
+-- Verten kunne opprette og endre mål/oppgaver, men aldri fjerne dem. Et
+-- feilplassert mål ble dermed liggende ut kvelden.
+--
+-- To ting er verdt å vite om sletting:
+--
+-- 1) POENG FØLGER MED. Slettes et GODKJENT mål, fjernes også poengene det ga
+--    (saboteur_points_ledger har ingen fremmednøkkel til målet, så det må
+--    gjøres eksplisitt). Alternativet — å la poeng bli liggende for et mål
+--    ingen lenger kan se — ville gjort poengtavla umulig å forklare.
+--
+-- 2) HINT-KOBLINGER OVERLEVER. Sletter du et mål som utløser et hint, settes
+--    koblingen til null (fremmednøkkelen er «on delete set null» fra 00017),
+--    og hintet blir et vanlig hint i stedet for å forsvinne. Allerede utdelte
+--    hint tas aldri tilbake — deltakerne har jo lest dem.
+--
+-- Trygg å kjøre flere ganger.
+-- ============================================================================
+
 create or replace function host_delete_objective(p_host_token uuid, p_objective_id uuid)
 returns json
 language plpgsql security definer set search_path = public
@@ -4471,11 +6678,40 @@ end $$;
 grant execute on function host_delete_objective(uuid, uuid) to anon, authenticated;
 grant execute on function host_delete_task(uuid, uuid) to anon, authenticated;
 
+-- ==========================================================================
+-- ▼ 00019_task_and_hint_libraries.sql
+-- ==========================================================================
+
+-- ============================================================================
+-- MIGRASJON 00019 — Oppgavebibliotek og hintkort til de lojale
+--
+-- Nå får de lojale sin egen motor: 25 ferdige oppgaver, 10 ferdige hintkort,
+-- og et hint som deles ut når verten godkjenner en oppgave. Poenget er at de
+-- lojale ikke bare sitter og mistenker — de etterforsker.
+--
+-- HVORDAN HINTET VELGES (den viktige regelen):
+--   Har oppgaven en egen hinttekst  ->  den brukes, som før.
+--   Er hintfeltet TOMT              ->  det trekkes et TILFELDIG hintkort fra
+--                                       biblioteket ved godkjenning.
+--
+-- Trekningen unngår gjentakelser:
+--   • «kun denne spilleren»  -> et kort spilleren ikke har fått før
+--   • «alle lojale»          -> ETT kort, likt for alle, som ikke alt er brukt
+--                               i spillet (ellers ville folk sammenlignet ulike
+--                               hint og trodd de betydde noe forskjellig)
+--
+-- Teksten som faktisk ble delt ut lagres på selve utdelingen
+-- (saboteur_hint_releases.hint_text). Det er nødvendig fordi et tilfeldig hint
+-- ikke står noe sted på oppgaven — og det gjør utdelingen historisk korrekt
+-- selv om biblioteket endres senere.
+--
+-- Trygg å kjøre flere ganger.
+-- ============================================================================
+
 -- ----------------------------------------------------------------------------
--- Oppgavebibliotek (25) + hintkort (10) til de lojale, og tilfeldig hint ved
--- godkjenning når oppgavens hintfelt står tomt (00019_task_and_hint_libraries.sql).
--- Erstatter _saboteur_release_hint / get_my_saboteur_brief lenger oppe.
+-- 1) BIBLIOTEKENE
 -- ----------------------------------------------------------------------------
+
 create table if not exists saboteur_task_library (
   id         uuid primary key default gen_random_uuid(),
   sort_order int  not null,
@@ -4843,3 +7079,120 @@ end $$;
 grant execute on function list_saboteur_task_library() to anon, authenticated;
 grant execute on function host_list_saboteur_hint_library(uuid) to anon, authenticated;
 grant execute on function host_add_task_from_library(uuid, uuid, uuid) to anon, authenticated;
+
+-- ==========================================================================
+-- ▼ 00020_migration_tracking.sql
+-- ==========================================================================
+
+-- ============================================================================
+-- MIGRASJON 00020 — Hold styr på hvilke migrasjoner som er kjørt
+--
+-- Problemet dette løser: prosjektet har hatt 19 migrasjonsfiler og INGEN måte
+-- å vite hvilke som faktisk er kjørt i en gitt database. «Kjørte jeg 00015?»
+-- har bare kunnet besvares ved å prøve seg fram — og en glemt migrasjon ser
+-- ut som en ødelagt funksjon, ikke som en manglende oppdatering. Det har
+-- kostet flere feilsøkingsrunder.
+--
+-- Herfra: hver migrasjon avslutter med å registrere seg selv, og
+-- `select * from schema_migrations order by version;` svarer på spørsmålet.
+--
+-- Denne fila registrerer også ALLE tidligere migrasjoner (00001–00019). Det
+-- er en bevisst antakelse: kjører du denne, har du en database som allerede
+-- er oppdatert. Stemmer ikke det, kjør supabase-schema.sql først — den er
+-- komplett og idempotent — og deretter denne.
+--
+-- Trygg å kjøre flere ganger.
+-- ============================================================================
+
+create table if not exists schema_migrations (
+  version     text primary key,          -- filnavnet uten .sql, f.eks. '00015_announcement_drafts'
+  applied_at  timestamptz not null default now(),
+  note        text not null default ''
+);
+
+alter table schema_migrations enable row level security;
+revoke all on schema_migrations from anon, authenticated;
+
+-- Registrer en migrasjon. Kalles på slutten av hver migrasjonsfil.
+create or replace function record_migration(p_version text, p_note text default '')
+returns void
+language plpgsql security definer set search_path = public
+as $$
+begin
+  insert into schema_migrations (version, note)
+  values (p_version, coalesce(p_note, ''))
+  on conflict (version) do nothing;   -- kjørt før: ikke flytt tidspunktet
+end $$;
+
+revoke execute on function record_migration(text, text) from public, anon, authenticated;
+
+-- Hvilke migrasjoner mangler? Sammenlign lista under med filene i
+-- supabase/migrations/. Kjør:
+--     select * from missing_migrations();
+-- Tom liste = databasen er à jour.
+create or replace function missing_migrations()
+returns table (version text, status text)
+language plpgsql security definer set search_path = public
+as $$
+declare
+  -- Kjent historikk per 00020. Nye migrasjoner MÅ legges til her i tillegg
+  -- til å kalle record_migration(), ellers vet ikke denne funksjonen om dem.
+  v_known text[] := array[
+    '00001_init',
+    '00002_mysteries',
+    '00003_auth',
+    '00004_evidence',
+    '00005_profile_names',
+    '00006_two_new_mysteries',
+    '00007_runbooks',
+    '00008_remove_evidence',
+    '00009_saboteur_game',
+    '00010_saboteur_discovery',
+    '00011_saboteur_standalone',
+    '00012_saboteur_account',
+    '00013_saboteur_pins_phases',
+    '00014_unique_player_names',
+    '00015_announcement_drafts',
+    '00016_saboteur_intro_library',
+    '00017_hint_trigger',
+    '00018_delete_objectives_tasks',
+    '00019_task_and_hint_libraries',
+    '00020_migration_tracking'
+  ];
+  v_version text;
+begin
+  foreach v_version in array v_known loop
+    if not exists (select 1 from schema_migrations sm where sm.version = v_version) then
+      version := v_version;
+      status  := 'IKKE KJØRT — kjør supabase/migrations/' || v_version || '.sql';
+      return next;
+    end if;
+  end loop;
+end $$;
+
+grant execute on function missing_migrations() to anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Registrer historikken. Se hovedkommentaren over for antakelsen som gjøres.
+-- ----------------------------------------------------------------------------
+
+do $$
+declare
+  v_version text;
+  v_all text[] := array[
+    '00001_init', '00002_mysteries', '00003_auth', '00004_evidence',
+    '00005_profile_names', '00006_two_new_mysteries', '00007_runbooks',
+    '00008_remove_evidence', '00009_saboteur_game', '00010_saboteur_discovery',
+    '00011_saboteur_standalone', '00012_saboteur_account',
+    '00013_saboteur_pins_phases', '00014_unique_player_names',
+    '00015_announcement_drafts', '00016_saboteur_intro_library',
+    '00017_hint_trigger', '00018_delete_objectives_tasks',
+    '00019_task_and_hint_libraries'
+  ];
+begin
+  foreach v_version in array v_all loop
+    perform record_migration(v_version, 'registrert i etterkant av 00020');
+  end loop;
+end $$;
+
+select record_migration('00020_migration_tracking', 'innfører migrasjonssporing');
