@@ -72,7 +72,8 @@ declare
     '00018_delete_objectives_tasks',
     '00019_task_and_hint_libraries',
     '00020_migration_tracking',
-    '00021_everyone_votes'
+    '00021_everyone_votes',
+    '00022_publish_missions'
   ];
   v_version text;
 begin
