@@ -453,6 +453,36 @@ describe('Skjult agenda migration — security invariants', () => {
     expect(saboteurView).toMatch(/host_list_saboteur_hint_library[\s\S]{0,200}hostToken\(\)/)
   })
 
+  it('every participant can vote, not just the Lojale', () => {
+    const votes = read('supabase/migrations/00021_everyone_votes.sql')
+    // A Sabotør who could not vote would out themselves instantly — and other
+    // players could deduce roles from who had not voted.
+    expect(votes).toMatch(/'can_vote', v_round\.id is not null and v_part\.active and not v_voted/)
+    expect(votes).toMatch(/if not v_part\.active then\s*\n\s*raise exception/)
+    // The role check must be gone from all three vote paths.
+    const voteFns = votes.match(
+      /create or replace function (get_my_saboteur_vote_status|get_saboteur_ballot_targets|cast_saboteur_ballot)[\s\S]*?\nend \$\$;/g
+    ) || []
+    expect(voteFns.length).toBe(3)
+    for (const fn of voteFns) {
+      expect(fn).not.toMatch(/role <> 'LOYAL'/)
+      expect(fn).not.toMatch(/v_part\.role = 'LOYAL'/)
+    }
+    // Everything that made voting trustworthy still holds.
+    expect(votes).toMatch(/status = 'open'/)              // only while open
+    expect(votes).toMatch(/exception when unique_violation/) // one ballot each
+  })
+
+  it('the player screen can be shown to others without revealing the role', () => {
+    // The whole point: role, missions and hints are all behind collapsed
+    // controls, and the visible label must not differ by role.
+    expect(saboteurView).toMatch(/<summary>[\s\S]{0,120}Din rolle — trykk for å se den<\/summary>/)
+    expect(saboteurView).toMatch(/Dine oppdrag\$\{missionCount/)
+    // A Sabotør-only heading would give the game away to anyone glancing over.
+    expect(saboteurView).not.toMatch(/<h2>\$\{icon\(I\.objective[^}]*\}Dine mål<\/h2>/)
+    expect(saboteurView).not.toMatch(/<h2>\$\{icon\(I\.task[^}]*\}Dine oppgaver<\/h2>/)
+  })
+
   it('canonical supabase-schema.sql matches the standalone model', () => {
     expect(schemaFile).toMatch(/SABOTEUR_GAME_ENABLED/)
     expect(schemaFile).toMatch(/create or replace function create_saboteur_game\(/i)

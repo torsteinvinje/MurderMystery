@@ -729,15 +729,78 @@ footer.app-footer a { color: var(--text-muted); }
 
 a { color: var(--accent-strong); }
 
-details.editor { margin-top: 10px; }
-details.editor summary {
+/* Disclosure controls.
+   These used to be bare grey text, which people simply did not see as
+   tappable — the single most common confusion on the player screen. They now
+   read as buttons: a bordered surface, a chevron that turns when open, and a
+   touch target big enough for a thumb at a party. */
+details.editor { margin-top: 12px; }
+
+details.editor > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
-  font-size: 13.5px;
+  list-style: none; /* hide the native marker; we draw our own chevron */
+  min-height: 44px;
+  padding: 11px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 15px;
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--text);
+  transition: background 0.12s, border-color 0.12s;
 }
-details.editor summary:hover { color: var(--text); }
+details.editor > summary::-webkit-details-marker { display: none; }
+
+/* Chevron, drawn in CSS so it needs no icon font. */
+details.editor > summary::after {
+  content: '';
+  margin-left: auto;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid var(--text-faint);
+  border-bottom: 2px solid var(--text-faint);
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform 0.15s;
+}
+details.editor[open] > summary::after {
+  transform: rotate(-135deg) translate(-2px, -2px);
+}
+
+details.editor > summary:hover {
+  background: var(--surface-soft);
+  border-color: var(--text-faint);
+}
+details.editor > summary:focus-visible {
+  outline: 3px solid rgba(194, 36, 50, 0.45);
+  outline-offset: 2px;
+}
+details.editor[open] > summary {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+}
+
 details.editor label { margin-top: 10px; }
+
+/* A secret the player is choosing to expose — the role card, mainly. Red
+   border so it reads as "careful, this is private" rather than just another
+   collapsed section. */
+details.secret > summary {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+details.secret > summary::after {
+  border-right-color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+details.secret > summary:hover {
+  background: #f7dfe2;
+  border-color: var(--accent-strong);
+}
 
 hr.divider { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
 
