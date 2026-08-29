@@ -483,6 +483,29 @@ describe('Skjult agenda migration — security invariants', () => {
     expect(saboteurView).not.toMatch(/<h2>\$\{icon\(I\.task[^}]*\}Dine oppgaver<\/h2>/)
   })
 
+  it('unpublished missions are never sent to players, and cannot be claimed', () => {
+    const pub = read('supabase/migrations/00022_publish_missions.sql')
+    // The player brief must filter both lists on published.
+    const brief = pub.match(/create or replace function get_my_saboteur_brief[\s\S]*?\nend \$\$;/i)[0]
+    expect(brief).toMatch(/from saboteur_objectives o\s*\n\s*where o\.assigned_participant_id = v_part\.id and o\.published/)
+    expect(brief).toMatch(/from saboteur_tasks t\s*\n\s*where t\.assigned_participant_id = v_part\.id and t\.published/)
+    // Defence in depth: a guessed or stale id cannot claim a draft either.
+    expect(pub).toMatch(/where id = p_objective_id and assigned_participant_id = v_part\.id and published/)
+    expect(pub).toMatch(/where id = p_task_id and assigned_participant_id = v_part\.id and published/)
+    // Existing rows were live, so the column is added defaulting TRUE and only
+    // then flipped to FALSE for new rows — nothing vanishes mid-game.
+    for (const table of ['saboteur_objectives', 'saboteur_tasks']) {
+      expect(pub).toMatch(new RegExp(`alter table ${table} add column if not exists published boolean not null default true`, 'i'))
+      expect(pub).toMatch(new RegExp(`alter table ${table} alter column published set default false`, 'i'))
+    }
+    // Re-publishing must not move the original publish time.
+    expect(pub).toMatch(/published_at = case when v_pub then coalesce\(published_at, now\(\)\) else null end/)
+    // The host still sees both, or drafts would be unmanageable.
+    const hostGet = pub.match(/create or replace function host_get_saboteur_game[\s\S]*?\nend \$\$;/i)[0]
+    expect(hostGet).toMatch(/'published', o\.published/)
+    expect(hostGet).toMatch(/'published', t\.published/)
+  })
+
   it('canonical supabase-schema.sql matches the standalone model', () => {
     expect(schemaFile).toMatch(/SABOTEUR_GAME_ENABLED/)
     expect(schemaFile).toMatch(/create or replace function create_saboteur_game\(/i)

@@ -264,6 +264,34 @@ function friendlyError(err, rpcName) {
   return msg
 }
 
+// Create a mission, then publish it if the host asked for that. Two calls
+// rather than one flag on the insert: it keeps the upsert signatures stable
+// (a changed signature has to be dropped first, or PostgREST sees the call as
+// ambiguous) and mirrors how beskjeder already work.
+async function createMission(key, rpcName, params, publishNow, kind, flashText) {
+  if (state.pending) return
+  state.pending = key
+  state.error = ''
+  render()
+  try {
+    const created = await rpc(rpcName, { p_host_token: hostToken(), ...params })
+    if (publishNow && created?.id) {
+      await rpc(kind === 'objective' ? 'host_set_objective_published' : 'host_set_task_published', {
+        p_host_token: hostToken(),
+        ...(kind === 'objective' ? { p_objective_id: created.id } : { p_task_id: created.id }),
+        p_published: true,
+      })
+    }
+    await refreshHost()
+    showFlash(publishNow ? flashText : 'Lagret som utkast')
+  } catch (err) {
+    state.error = friendlyError(err, rpcName)
+  } finally {
+    state.pending = ''
+    render()
+  }
+}
+
 // Same as hostAction, but flips a button into a "…" state and redraws BEFORE
 // the request goes out. An add/save takes two round trips (the write, then the
 // refresh), which is long enough that a silent button reads as broken.
@@ -849,8 +877,10 @@ function renderHostObjectives() {
       return `
         <div class="card">
           <p class="kicker">${who ? esc(who.display_name) : '?'} · ${o.points} poeng
+            ${publishBadge(o)}
             ${o.status !== 'assigned' ? ` · <span class="badge${o.status === 'approved' ? ' ok' : o.status === 'rejected' ? ' red' : ''}">${esc(ITEM_STATUS_LABEL[o.status] ?? o.status)}</span>` : ''}
           </p>
+          ${publishButton(o, 'objective')}
           <h3>${esc(o.title)}</h3>
           ${o.description ? `<p>${escMultiline(o.description)}</p>` : ''}
           ${o.status === 'claimed' ? `
@@ -905,6 +935,7 @@ function renderHostObjectives() {
             <label>Til
               <select name="participant_id">${saboteurTargetOptions(saboteurs)}</select>
             </label>
+            ${publishNowCheckbox()}
             <button ${state.pending ? 'disabled' : ''}>
               ${pendingLabel('obj-library', 'Legg til fra biblioteket', 'Legger til …', I.add)}
             </button>
@@ -924,6 +955,7 @@ function renderHostObjectives() {
           <p class="hint">Klikk i feltet for å se de ${state.library.length} ferdige forslagene — du kan også skrive helt fritt.</p>
           <label>Beskrivelse (valgfritt) <textarea name="description"></textarea></label>
           <label>Poeng <input name="points" type="number" min="0" value="2" /></label>
+          ${publishNowCheckbox()}
           <button ${state.pending ? 'disabled' : ''}>
             ${pendingLabel('obj-new', 'Legg til mål', 'Legger til …', I.add)}
           </button>
@@ -942,6 +974,37 @@ function objectiveExamplesDatalist() {
     <datalist id="objective-examples">
       ${state.library.map((l) => `<option value="${esc(l.title)}"></option>`).join('')}
     </datalist>`
+}
+
+// Publish state for a mission (objective or task). `published` is undefined on
+// databases where migration 00022 hasn't run yet — treat that as published, so
+// the panel degrades to the old behaviour instead of showing everything as a
+// draft.
+function isPublished(item) {
+  return item.published !== false
+}
+
+function publishBadge(item) {
+  if (isPublished(item)) return ''
+  return ` · <span class="badge">${icon(I.edit, { lead: true })}Utkast — spilleren ser den ikke</span>`
+}
+
+function publishButton(item, kind) {
+  if (item.published === undefined) return '' // pre-00022 database
+  return isPublished(item)
+    ? `<button class="btn-quiet" data-unpublish-${kind}="${esc(item.id)}">${icon(I.hide, { lead: true })}Trekk tilbake</button>`
+    : `<button data-publish-${kind}="${esc(item.id)}">${icon(I.show, { lead: true })}Publiser</button>`
+}
+
+// Checkbox shared by every "create" form, so the common case (send it now)
+// stays one step while preparing ahead of time is still possible.
+function publishNowCheckbox() {
+  return `
+    <label style="display:flex; align-items:center; gap:8px; font-weight:400;">
+      <input type="checkbox" name="publish_now" style="width:auto;" checked />
+      Publiser med én gang
+    </label>
+    <p class="hint">Slå av for å lagre som utkast. Utkast er kun synlige for deg til du publiserer dem.</p>`
 }
 
 // An empty value means "let the database pick" — the draw happens server-side,
@@ -998,8 +1061,10 @@ function renderHostTasks() {
       return `
         <div class="card">
           <p class="kicker">${who ? esc(who.display_name) : '?'}
+            ${publishBadge(t)}
             ${t.status !== 'assigned' ? ` · <span class="badge${t.status === 'approved' ? ' ok' : t.status === 'rejected' ? ' red' : ''}">${esc(ITEM_STATUS_LABEL[t.status] ?? t.status)}</span>` : ''}
           </p>
+          ${publishButton(t, 'task')}
           <h3>${esc(t.title)}</h3>
           ${t.description ? `<p>${escMultiline(t.description)}</p>` : ''}
           <p class="hint">${icon(I.hint, { lead: true })}Hint: ${esc(t.hint_text || '—')}
@@ -1060,6 +1125,7 @@ function renderHostTasks() {
               ${loyals.map((p) => `<option value="${esc(p.id)}">${esc(p.display_name)}</option>`).join('')}
             </select>
           </label>
+          ${publishNowCheckbox()}
           <button ${state.pending ? 'disabled' : ''}>
             ${pendingLabel('task-library', 'Legg til fra biblioteket', 'Legger til …', I.add)}
           </button>
@@ -1100,6 +1166,7 @@ function renderHostTasks() {
           <p class="hint">Kobler du hintet til et mål, blir det et <strong>direkte hint</strong>:
           det slippes først når den sabotasjen faktisk har skjedd og du har godkjent den.
           ✓ betyr at målet allerede er godkjent.</p>
+          ${publishNowCheckbox()}
           <button ${state.pending ? 'disabled' : ''}>
             ${pendingLabel('task-new', 'Legg til oppgave', 'Legger til …', I.add)}
           </button>
@@ -1486,30 +1553,30 @@ function wireEvents() {
     e.preventDefault()
     const f = e.target.elements
     // Empty select value -> null -> the database draws at random.
-    hostActionPending('obj-library', 'host_add_objective_from_library', {
+    createMission('obj-library', 'host_add_objective_from_library', {
       p_library_id: f.library_id.value || null,
       p_participant_id: f.participant_id.value || null,
-    }, 'Mål lagt til')
+    }, f.publish_now.checked, 'objective', 'Mål publisert')
   })
 
   bind('#task-library-form', 'submit', (e) => {
     e.preventDefault()
     const f = e.target.elements
-    hostActionPending('task-library', 'host_add_task_from_library', {
+    createMission('task-library', 'host_add_task_from_library', {
       p_library_id: f.library_id.value || null,
       p_participant_id: f.participant_id.value || null,
-    }, 'Oppgave lagt til')
+    }, f.publish_now.checked, 'task', 'Oppgave publisert')
   })
 
   bind('#new-objective-form', 'submit', (e) => {
     e.preventDefault()
     const f = e.target.elements
-    hostActionPending('obj-new', 'host_upsert_objective', {
+    createMission('obj-new', 'host_upsert_objective', {
       p_participant_id: f.participant_id.value || null, // null = random Sabotør
       p_title: f.title.value,
       p_description: f.description.value,
       p_points: Number(f.points.value) || 0,
-    }, 'Mål lagt til')
+    }, f.publish_now.checked, 'objective', 'Mål publisert')
   })
 
   app.querySelectorAll('[data-edit-objective]').forEach((form) =>
@@ -1524,6 +1591,26 @@ function wireEvents() {
         p_points: Number(f.points.value) || 0,
       }, 'Lagret')
     })
+  )
+  app.querySelectorAll('[data-publish-objective]').forEach((btn) =>
+    btn.addEventListener('click', () =>
+      hostAction('host_set_objective_published',
+        { p_objective_id: btn.dataset.publishObjective, p_published: true }, 'Publisert'))
+  )
+  app.querySelectorAll('[data-unpublish-objective]').forEach((btn) =>
+    btn.addEventListener('click', () =>
+      hostAction('host_set_objective_published',
+        { p_objective_id: btn.dataset.unpublishObjective, p_published: false }, 'Trukket tilbake'))
+  )
+  app.querySelectorAll('[data-publish-task]').forEach((btn) =>
+    btn.addEventListener('click', () =>
+      hostAction('host_set_task_published',
+        { p_task_id: btn.dataset.publishTask, p_published: true }, 'Publisert'))
+  )
+  app.querySelectorAll('[data-unpublish-task]').forEach((btn) =>
+    btn.addEventListener('click', () =>
+      hostAction('host_set_task_published',
+        { p_task_id: btn.dataset.unpublishTask, p_published: false }, 'Trukket tilbake'))
   )
   app.querySelectorAll('[data-delete-objective]').forEach((btn) =>
     btn.addEventListener('click', () => {
@@ -1566,14 +1653,14 @@ function wireEvents() {
   bind('#new-task-form', 'submit', (e) => {
     e.preventDefault()
     const f = e.target.elements
-    hostActionPending('task-new', 'host_upsert_task', {
+    createMission('task-new', 'host_upsert_task', {
       p_participant_id: f.participant_id.value || null, // null = random Lojal
       p_title: f.title.value,
       p_description: f.description.value,
       p_hint_text: f.hint_text.value,
       p_hint_audience: f.hint_audience.value,
       p_trigger_objective_id: f.trigger_objective_id?.value || null,
-    }, 'Oppgave lagt til')
+    }, f.publish_now.checked, 'task', 'Oppgave publisert')
   })
   app.querySelectorAll('[data-clear-trigger]').forEach((btn) =>
     btn.addEventListener('click', () =>
