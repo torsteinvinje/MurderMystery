@@ -254,6 +254,11 @@ const RPC_MIGRATION = {
   host_set_task_published: '00022_publish_missions.sql',
   host_set_max_voting_rounds: '00023_scoring_loop.sql',
   host_award_bonus: '00023_scoring_loop.sql',
+  host_reopen_saboteur_game: '00024_plan_ahead.sql',
+  // These two existed before, but 00024 gave them the p_planned_slot argument
+  // the client now always sends — an older database rejects the call outright.
+  host_upsert_objective: '00024_plan_ahead.sql',
+  host_add_objective_from_library: '00024_plan_ahead.sql',
 }
 
 function friendlyError(err, rpcName) {
@@ -665,8 +670,14 @@ function renderHost() {
                  <button class="btn-quiet" id="end-cancel">Avbryt</button>`
               : `<button class="btn-danger" id="end-btn">${icon(I.reveal, { lead: true })}Avslutt spillet</button>`)
           : ''}
-        ${g.status === 'ended' ? `<button class="btn-quiet" data-status="archived">Arkiver</button>` : ''}
+        ${g.status === 'ended' ? `
+          <button class="btn-quiet" id="reopen-btn">${icon(I.play, { lead: true })}Åpne spillet igjen</button>
+          <button class="btn-quiet" data-status="archived">Arkiver</button>` : ''}
       </div>
+      ${g.status === 'ended' ? `
+        <p class="hint">Åpner du spillet igjen, skjules rollene for spillerne på nytt og
+        «unnsluppet»-bonusene regnes ut på nytt neste gang du avslutter. Alt annet — poeng,
+        godkjente oppdrag og avstemninger — blir stående.</p>` : ''}
       <label style="display:flex; align-items:center; gap:8px; font-weight:400; margin-top:14px;">
         <input type="checkbox" id="know-each-other" style="width:auto;" ${g.know_each_other ? 'checked' : ''} />
         Sabotørene kjenner hverandre
@@ -861,6 +872,7 @@ function renderHostParticipants(draft) {
     .join('')
 
   return `
+    ${renderMissionRoster()}
     <h2>${icon(I.guestsCount, { lead: true })}Deltakere (${list.length})</h2>
     ${draft
       ? `<p class="lede">Del ut roller før du starter. Det må være minst én Sabotør og én Lojal.</p>`
@@ -875,74 +887,161 @@ function renderHostParticipants(draft) {
       </div>` : ''}`
 }
 
-function renderHostObjectives() {
-  const participants = state.game.participants || []
-  const saboteurs = participants.filter((p) => p.role === 'SABOTEUR')
-  const objectives = state.game.objectives || []
+// Three bundles the host can fill in before a single guest has joined. Bundle
+// N goes to the Nth Sabotor the moment the game starts, so the whole evening
+// can be written at the kitchen table the day before.
+const PLANNED_SLOTS = [1, 2, 3]
 
-  const cards = objectives
-    .map((o) => {
-      const who = participants.find((p) => p.id === o.participant_id)
-      return `
-        <div class="card">
-          <p class="kicker">${who ? esc(who.display_name) : '?'} · ${o.points} poeng
-            ${publishBadge(o)}
-            ${o.status !== 'assigned' ? ` · <span class="badge${o.status === 'approved' ? ' ok' : o.status === 'rejected' ? ' red' : ''}">${esc(ITEM_STATUS_LABEL[o.status] ?? o.status)}</span>` : ''}
-          </p>
-          ${publishButton(o, 'objective')}
-          <h3>${esc(o.title)}</h3>
-          ${o.description ? `<p>${escMultiline(o.description)}</p>` : ''}
-          ${o.status === 'claimed' ? `
-            <div class="btn-row">
-              <button data-decide-objective="${esc(o.id)}" data-approve="true">${icon(I.ok, { lead: true })}Godkjenn</button>
-              <button class="btn-quiet" data-decide-objective="${esc(o.id)}" data-approve="false">Avslå</button>
-            </div>` : ''}
-          <details class="editor" data-panel="edit-objective-${esc(o.id)}">
-            <summary>${icon(I.edit, { lead: true })}Rediger eller slett</summary>
-            <form data-hold data-edit-objective="${esc(o.id)}">
-              <label>Tittel
-                <input name="title" value="${esc(o.title)}" maxlength="160" required
-                       list="objective-examples" autocomplete="off" />
-              </label>
-              <label>Beskrivelse <textarea name="description">${esc(o.description ?? '')}</textarea></label>
-              <label>Poeng <input name="points" type="number" min="0" value="${esc(o.points)}" /></label>
-              <div class="btn-row">
-                <button ${state.pending ? 'disabled' : ''}>
-                  ${pendingLabel(`obj-edit-${o.id}`, 'Lagre endring', 'Lagrer …', I.save)}
-                </button>
-                <button type="button" class="btn-quiet" data-delete-objective="${esc(o.id)}">
-                  ${icon(I.del, { lead: true })}Slett målet
-                </button>
-              </div>
-              ${o.status === 'approved'
-                ? '<p class="hint">Målet er godkjent — sletter du det, trekkes poengene tilbake.</p>'
-                : ''}
-            </form>
-          </details>
-        </div>`
-    })
-    .join('')
+// One control for both ways of aiming an objective: at a bundle (before roles
+// exist) or at a person (after). Values are prefixed so the handler can tell
+// them apart - "slot:2" versus "p:<uuid>", empty meaning "a random Sabotor".
+function objectiveTargetOptions(saboteurs, draft) {
+  const slots = draft
+    ? PLANNED_SLOTS.map((n) => `<option value="slot:${n}">Bunke ${n} — til sabotør nr. ${n}</option>`).join('')
+    : ''
+  const people = saboteurs.map((p) => `<option value="p:${esc(p.id)}">${esc(p.display_name)}</option>`).join('')
+  const random = saboteurs.length > 0 ? '<option value="">Tilfeldig Sabotør</option>' : ''
+  return `${slots}${random}${people}`
+}
+
+// Split "slot:2" / "p:<uuid>" / "" into the two RPC parameters.
+function parseObjectiveTarget(value) {
+  if (value && value.startsWith('slot:')) {
+    return { p_planned_slot: Number(value.slice(5)), p_participant_id: null }
+  }
+  if (value && value.startsWith('p:')) {
+    return { p_planned_slot: null, p_participant_id: value.slice(2) }
+  }
+  return { p_planned_slot: null, p_participant_id: null }
+}
+
+// Mid-party, the question a host actually has is "who is doing something, and
+// who is sitting there with nothing?" Counting cards across two tabs to answer
+// it is hopeless, so this is one table: missions out, waiting for approval,
+// and done — with the people who have nothing at all called out first, since
+// they are the ones the host needs to act on.
+function renderMissionRoster() {
+  const g = state.game
+  const list = (g.participants || []).filter((p) => p.role)
+  if (list.length === 0) return ''
+
+  const idle = list.filter((p) => (p.assigned_count ?? 0) === 0 && (p.draft_count ?? 0) === 0)
+  const waiting = list.filter((p) => (p.claimed_count ?? 0) > 0)
+
+  const row = (p) => {
+    const out = p.assigned_count ?? 0
+    const done = p.approved_count ?? 0
+    const claimed = p.claimed_count ?? 0
+    const drafts = p.draft_count ?? 0
+    const nothing = out === 0 && drafts === 0
+    return `
+      <tr class="${nothing ? 'row-idle' : ''}">
+        <td>
+          <strong>${esc(p.display_name)}</strong>
+          ${p.active ? '' : ' <span class="badge">inaktiv</span>'}
+          <div class="tagline">${p.role === 'SABOTEUR' ? 'Sabotør' : 'Lojal'}</div>
+        </td>
+        <td>${nothing ? '<span class="badge red">ingen</span>' : `${done} av ${out}`}</td>
+        <td>${claimed > 0 ? `<span class="badge">${claimed} venter på deg</span>` : '—'}</td>
+        <td>${drafts > 0 ? `${drafts} utkast` : '—'}</td>
+      </tr>`
+  }
+
+  // Sabotører first only when the host can already see roles anyway; the host
+  // screen always can, so a stable role grouping just makes it easier to read.
+  const loyals = list.filter((p) => p.role === 'LOYAL')
+  const saboteurs = list.filter((p) => p.role === 'SABOTEUR')
+
+  return `
+    <h2>${icon(I.tally, { lead: true })}Oppdragsoversikt</h2>
+    ${idle.length > 0
+      ? `<p class="notice">${icon(I.warn, { lead: true })}
+         <strong>${idle.map((p) => esc(p.display_name)).join(', ')}</strong>
+         har ingen oppdrag ennå.</p>`
+      : ''}
+    ${waiting.length > 0
+      ? `<p class="lede">${icon(I.ok, { lead: true })}${waiting.length} deltaker(e) venter på at du
+         skal godkjenne noe — se Verkstedet.</p>`
+      : ''}
+    <div class="table-scroll">
+      <table class="tally roster">
+        <thead>
+          <tr><th>Deltaker</th><th>Fullført</th><th>Til godkjenning</th><th>Utkast</th></tr>
+        </thead>
+        <tbody>
+          ${loyals.map(row).join('')}
+          ${saboteurs.map(row).join('')}
+        </tbody>
+      </table>
+    </div>`
+}
+
+function renderHostObjectives() {
+  const g = state.game
+  const draft = g.status === 'draft'
+  const participants = g.participants || []
+  const saboteurs = participants.filter((p) => p.role === 'SABOTEUR')
+  const objectives = g.objectives || []
+
+  const planned = objectives.filter((o) => !o.participant_id)
+  const dealt = objectives.filter((o) => o.participant_id)
+
+  // Planning for more Sabotorer than there will be would silently drop a
+  // bundle at start. Say so now, while it can still be fixed.
+  const slotsUsed = g.planned_slots_used ?? 0
+  const orphanWarning = planned.length > 0 && saboteurs.length > 0 && slotsUsed > saboteurs.length
+    ? `<p class="notice">${icon(I.warn, { lead: true })}Du har fylt bunke ${slotsUsed}, men det er bare
+       ${saboteurs.length} sabotør(er). Bunker uten en sabotør blir ikke delt ut${draft
+         ? ' — flytt målene, eller gjør flere til Sabotør før du starter.'
+         : `. Spillet er alt i gang, så disse ${planned.length} målet/målene ble liggende igjen.
+            Trykk «Åpne roller igjen» øverst om du vil flytte dem, eller slett dem.`}</p>`
+    : ''
+
+  const bundles = PLANNED_SLOTS.map((n) => {
+    const inSlot = planned.filter((o) => o.planned_slot === n)
+    if (inSlot.length === 0) return ''
+    const owner = saboteurs[n - 1]
+    return `
+      <div class="bundle">
+        <p class="kicker">Bunke ${n} · ${inSlot.length} mål ·
+          ${owner ? `går til ${esc(owner.display_name)}` : `venter på sabotør nr. ${n}`}
+        </p>
+        ${inSlot.map((o) => objectiveCard(o, participants, draft)).join('')}
+      </div>`
+  }).join('')
 
   return `
     <h2>${icon(I.objective, { lead: true })}Mål til Sabotørene</h2>
-    ${cards || '<p class="notice">Ingen mål lagt til ennå.</p>'}
-    ${saboteurs.length === 0
+
+    ${draft ? `
+      <p class="lede">Planlegg i fred før gjestene kommer: fyll opptil tre bunker med mål.
+      Bunke 1 går til den første sabotøren, bunke 2 til den andre, og så videre —
+      helt automatisk når du starter spillet. Du kan endre alt fram til da.</p>` : ''}
+    ${orphanWarning}
+
+    ${bundles}
+    ${dealt.length > 0 && planned.length > 0 ? '<h3>Delt ut</h3>' : ''}
+    ${dealt.map((o) => objectiveCard(o, participants, draft)).join('')}
+
+    ${objectives.length === 0 ? '<p class="notice">Ingen mål lagt til ennå.</p>' : ''}
+
+    ${!draft && saboteurs.length === 0
       ? '<p class="lede">Gi noen rollen Sabotør for å kunne legge til mål.</p>'
       : `
       ${state.library.length > 0 ? `
         <div class="card">
           <p class="kicker">${icon(I.shuffle, { lead: true })}Ferdige mål (${state.library.length})</p>
           <p class="lede">Slipp å finne på alt selv. Trekk et tilfeldig mål, eller velg
-          ett fra lista — og bestem om det skal gå til en tilfeldig Sabotør eller en bestemt.</p>
+          ett fra lista — og bestem hvor det skal.</p>
           <form data-hold id="library-form">
             <label>Mål
               <select name="library_id">
-                <option value="">🎲 Trekk et tilfeldig mål</option>
+                <option value="">Trekk et tilfeldig mål</option>
                 ${state.library.map((l) => `<option value="${esc(l.id)}">${esc(l.title)} (${l.points} p)</option>`).join('')}
               </select>
             </label>
             <label>Til
-              <select name="participant_id">${saboteurTargetOptions(saboteurs)}</select>
+              <select name="target">${objectiveTargetOptions(saboteurs, draft)}</select>
             </label>
             ${publishNowCheckbox()}
             <button ${state.pending ? 'disabled' : ''}>
@@ -955,7 +1054,7 @@ function renderHostObjectives() {
         <summary>${icon(I.add, { lead: true })}Skriv et eget mål</summary>
         <form data-hold id="new-objective-form">
           <label>Til
-            <select name="participant_id">${saboteurTargetOptions(saboteurs)}</select>
+            <select name="target">${objectiveTargetOptions(saboteurs, draft)}</select>
           </label>
           <label>Tittel
             <input name="title" maxlength="160" required list="objective-examples"
@@ -972,6 +1071,55 @@ function renderHostObjectives() {
       </details>`}
 
     ${objectiveExamplesDatalist()}`
+}
+
+// One objective, whether it is sitting in a bundle or already with a Sabotor.
+function objectiveCard(o, participants, draft) {
+  const who = participants.find((p) => p.id === o.participant_id)
+  const undealt = !o.participant_id
+  return `
+    <div class="card">
+      <p class="kicker">${undealt ? `Bunke ${o.planned_slot}` : (who ? esc(who.display_name) : '?')} · ${o.points} poeng
+        ${publishBadge(o)}
+        ${o.status !== 'assigned' ? ` · <span class="badge${o.status === 'approved' ? ' ok' : o.status === 'rejected' ? ' red' : ''}">${esc(ITEM_STATUS_LABEL[o.status] ?? o.status)}</span>` : ''}
+      </p>
+      ${publishButton(o, 'objective')}
+      <h3>${esc(o.title)}</h3>
+      ${o.description ? `<p>${escMultiline(o.description)}</p>` : ''}
+      ${o.status === 'claimed' ? `
+        <div class="btn-row">
+          <button data-decide-objective="${esc(o.id)}" data-approve="true">${icon(I.ok, { lead: true })}Godkjenn</button>
+          <button class="btn-quiet" data-decide-objective="${esc(o.id)}" data-approve="false">Avslå</button>
+        </div>` : ''}
+      <details class="editor" data-panel="edit-objective-${esc(o.id)}">
+        <summary>${icon(I.edit, { lead: true })}Rediger eller slett</summary>
+        <form data-hold data-edit-objective="${esc(o.id)}">
+          <label>Tittel
+            <input name="title" value="${esc(o.title)}" maxlength="160" required
+                   list="objective-examples" autocomplete="off" />
+          </label>
+          <label>Beskrivelse <textarea name="description">${esc(o.description ?? '')}</textarea></label>
+          <label>Poeng <input name="points" type="number" min="0" value="${esc(o.points)}" /></label>
+          ${undealt && draft ? `
+          <label>Flytt til bunke
+            <select name="planned_slot">
+              ${PLANNED_SLOTS.map((n) => `<option value="${n}" ${o.planned_slot === n ? 'selected' : ''}>Bunke ${n}</option>`).join('')}
+            </select>
+          </label>` : ''}
+          <div class="btn-row">
+            <button ${state.pending ? 'disabled' : ''}>
+              ${pendingLabel(`obj-edit-${o.id}`, 'Lagre endring', 'Lagrer …', I.save)}
+            </button>
+            <button type="button" class="btn-quiet" data-delete-objective="${esc(o.id)}">
+              ${icon(I.del, { lead: true })}Slett målet
+            </button>
+          </div>
+          ${o.status === 'approved'
+            ? '<p class="hint">Målet er godkjent — sletter du det, trekkes poengene tilbake.</p>'
+            : ''}
+        </form>
+      </details>
+    </div>`
 }
 
 // A <datalist> gives the title field a dropdown of every ready-made objective
@@ -1014,14 +1162,6 @@ function publishNowCheckbox() {
       Publiser med én gang
     </label>
     <p class="hint">Slå av for å lagre som utkast. Utkast er kun synlige for deg til du publiserer dem.</p>`
-}
-
-// An empty value means "let the database pick" — the draw happens server-side,
-// so the client can't influence who is chosen.
-function saboteurTargetOptions(saboteurs) {
-  return `
-    <option value="">🎲 Tilfeldig Sabotør</option>
-    ${saboteurs.map((p) => `<option value="${esc(p.id)}">${esc(p.display_name)}</option>`).join('')}`
 }
 
 // Shows the optional link between a hint and a Sabotør objective, and — the
@@ -1185,7 +1325,9 @@ function renderHostTasks() {
           </button>
         </form>
       </details>`
-      : '<p class="lede">Gi noen rollen Lojal for å kunne legge til oppgaver.</p>'}`
+      : `<p class="lede">Gi noen rollen Lojal for å kunne legge til oppgaver.
+         Oppgaver deles ut underveis i selskapet — det er sabotørmålene du kan
+         forberede på forhånd, i bunker.</p>`}`
 }
 
 function renderHostVoting() {
@@ -1647,6 +1789,12 @@ function wireEvents() {
   })
   bind('#end-cancel', 'click', () => { state.confirmEnd = false; render() })
 
+  bind('#reopen-btn', 'click', () => {
+    if (confirm('Åpne spillet igjen? Rollene skjules for spillerne på nytt.')) {
+      hostAction('host_reopen_saboteur_game', {}, 'Spillet er åpnet igjen')
+    }
+  })
+
   const knowEach = app.querySelector('#know-each-other')
   if (knowEach) knowEach.addEventListener('change', () => hostAction('host_set_know_each_other', { p_enabled: knowEach.checked }))
   const showLb = app.querySelector('#show-leaderboard')
@@ -1720,11 +1868,14 @@ function wireEvents() {
   bind('#library-form', 'submit', (e) => {
     e.preventDefault()
     const f = e.target.elements
-    // Empty select value -> null -> the database draws at random.
+    // Empty library value -> the database draws at random; the target select
+    // works exactly as on the hand-written form.
+    const target = parseObjectiveTarget(f.target.value)
     createMission('obj-library', 'host_add_objective_from_library', {
       p_library_id: f.library_id.value || null,
-      p_participant_id: f.participant_id.value || null,
-    }, f.publish_now.checked, 'objective', 'Mål publisert')
+      ...target,
+    }, f.publish_now.checked, 'objective',
+      target.p_planned_slot ? `Lagt i bunke ${target.p_planned_slot}` : 'Mål publisert')
   })
 
   bind('#task-library-form', 'submit', (e) => {
@@ -1739,12 +1890,15 @@ function wireEvents() {
   bind('#new-objective-form', 'submit', (e) => {
     e.preventDefault()
     const f = e.target.elements
+    // Empty target -> a random Sabotør; "slot:N" -> a planning bundle.
+    const target = parseObjectiveTarget(f.target.value)
     createMission('obj-new', 'host_upsert_objective', {
-      p_participant_id: f.participant_id.value || null, // null = random Sabotør
+      ...target,
       p_title: f.title.value,
       p_description: f.description.value,
       p_points: Number(f.points.value) || 0,
-    }, f.publish_now.checked, 'objective', 'Mål publisert')
+    }, f.publish_now.checked, 'objective',
+      target.p_planned_slot ? `Lagt i bunke ${target.p_planned_slot}` : 'Mål publisert')
   })
 
   app.querySelectorAll('[data-edit-objective]').forEach((form) =>
@@ -1757,6 +1911,8 @@ function wireEvents() {
         p_title: f.title.value,
         p_description: f.description.value,
         p_points: Number(f.points.value) || 0,
+        // Only rendered while the objective is still sitting in a bundle.
+        p_planned_slot: f.planned_slot ? Number(f.planned_slot.value) : null,
       }, 'Lagret')
     })
   )

@@ -568,6 +568,81 @@ describe('Skjult agenda migration — security invariants', () => {
     expect(down).toMatch(/drop function if exists host_upsert_task\(uuid, uuid, uuid, text, text, text, text, uuid, int\)/)
   })
 
+  it('planned objectives belong to nobody, so they cannot reach a player', () => {
+    const plan = read('supabase/migrations/00024_plan_ahead.sql')
+
+    // A bundle row has no owner at all. Every player-facing query filters on
+    // "assigned_participant_id = my id", so an unowned row is invisible by
+    // construction rather than by a rule someone has to remember.
+    expect(plan).toMatch(/alter column assigned_participant_id drop not null/)
+    expect(plan).toMatch(/planned_slot is null or planned_slot between 1 and 3/)
+    // But it must never be BOTH unowned and unbundled - that row would be
+    // invisible to the host too, and quietly lost.
+    expect(plan).toMatch(/check \(assigned_participant_id is not null or planned_slot is not null\)/)
+
+    // The player brief still filters on ownership (unchanged by this file, so
+    // assert it against the canonical schema's final state).
+    expect(schemaFile).toMatch(/where o\.assigned_participant_id = v_part\.id and o\.published/)
+
+    // Bundles are a draft-time tool; once the game runs, objectives go to
+    // real people.
+    expect(plan).toMatch(/Bunker kan bare settes opp mens spillet er i utkast/)
+  })
+
+  it('reshuffling roles pulls undealt objectives back out of play', () => {
+    const plan = read('supabase/migrations/00024_plan_ahead.sql')
+    const undeal = plan.match(/create or replace function _saboteur_undeal_planned[\s\S]*?\nend \$\$;/i)[0]
+
+    // The dangerous case: game goes back to draft, roles are redealt, and a
+    // Sabotor objective is left sitting with someone who is now Lojal.
+    expect(undeal).toMatch(/set assigned_participant_id = null/)
+    expect(undeal).toMatch(/planned_slot is not null/)
+    // Anything already claimed or decided is history and stays put.
+    expect(undeal).toMatch(/status = 'assigned'/)
+
+    // And the transition function actually calls it on active -> draft.
+    const trans = plan.match(/create or replace function _saboteur_apply_transition[\s\S]*?\nend \$\$;/i)[0]
+    expect(trans).toMatch(/v_game\.status = 'active' and p_new_status = 'draft'[\s\S]{0,120}_saboteur_undeal_planned/)
+    expect(trans).toMatch(/v_game\.status = 'draft' and p_new_status = 'active'[\s\S]{0,200}_saboteur_deal_planned/)
+  })
+
+  it('an ended game can be reopened, and the end-of-game bonus recomputed', () => {
+    const plan = read('supabase/migrations/00024_plan_ahead.sql')
+    const trans = plan.match(/create or replace function _saboteur_apply_transition[\s\S]*?\nend \$\$;/i)[0]
+
+    expect(trans).toMatch(/\('ended', 'active'\)/)
+    // The undetected bonus is a calculation made at the finish line. Move the
+    // line and it has to be redone - the ledger is idempotent, so a stale row
+    // would otherwise block the recount forever.
+    expect(trans).toMatch(/delete from saboteur_points_ledger[\s\S]{0,200}source_type = 'undetected'/)
+    // Everything else - approved missions, correct votes, host bonuses - is a
+    // historical fact and must survive a reopen.
+    expect(trans).not.toMatch(/delete from saboteur_points_ledger[\s\S]{0,200}source_type in/)
+
+    expect(plan).toMatch(/create or replace function host_reopen_saboteur_game/i)
+    expect(plan).toMatch(/Bare et avsluttet spill kan åpnes igjen/)
+  })
+
+  it('an orphaned bundle cannot deadlock the voting gate', () => {
+    const plan = read('supabase/migrations/00024_plan_ahead.sql')
+    const open = plan.match(/create or replace function host_open_voting_round[\s\S]*?\nend \$\$;/i)[0]
+    // 00023 blocks voting on unsettled objectives. A bundle nobody received
+    // can never be settled, so it must not count - otherwise planning for
+    // three Sabotorer and running with two locks voting for the whole night.
+    expect(open).toMatch(/assigned_participant_id is not null[\s\S]{0,80}published and status in \('assigned', 'claimed'\)/)
+    const hostGet = plan.match(/create or replace function host_get_saboteur_game[\s\S]*?\nend \$\$;/i)[0]
+    expect(hostGet).toMatch(/'unsettled_objectives'[\s\S]{0,200}assigned_participant_id is not null/)
+  })
+
+  it('the new objective signatures replace the old ones outright', () => {
+    const plan = read('supabase/migrations/00024_plan_ahead.sql')
+    // Leaving both overloads in place makes every call ambiguous to PostgREST.
+    expect(plan).toMatch(/drop function if exists host_upsert_objective\(uuid, uuid, uuid, text, text, int, timestamptz\)/)
+    expect(plan).toMatch(/drop function if exists host_add_objective_from_library\(uuid, uuid, uuid\)/)
+    expect(plan).toMatch(/grant execute on function host_upsert_objective\(uuid, uuid, uuid, text, text, int, timestamptz, smallint\)/)
+    expect(read('supabase/migrations/00020_migration_tracking.sql')).toMatch(/'00024_plan_ahead'/)
+  })
+
   it('canonical supabase-schema.sql matches the standalone model', () => {
     expect(schemaFile).toMatch(/SABOTEUR_GAME_ENABLED/)
     expect(schemaFile).toMatch(/create or replace function create_saboteur_game\(/i)

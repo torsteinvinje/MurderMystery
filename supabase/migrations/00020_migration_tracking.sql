@@ -74,7 +74,8 @@ declare
     '00020_migration_tracking',
     '00021_everyone_votes',
     '00022_publish_missions',
-    '00023_scoring_loop'
+    '00023_scoring_loop',
+    '00024_plan_ahead'
   ];
   v_version text;
 begin

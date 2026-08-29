@@ -116,6 +116,24 @@ mål til Sabotørene og oppgaver til de Lojale, godkjenner det folk melder inn,
 åpner avstemning når det passer — og avslutter spillet, som er det eneste som
 avslører rollene.
 
+**Planlegg før gjestene kommer.** Verten kan fylle opptil tre *bunker* med
+sabotørmål lenge før noen har tastet koden — bunke 1 går til den første
+sabotøren, bunke 2 til den andre, og så videre, helt automatisk når spillet
+starter. Bunkene kan redigeres, flyttes og slettes helt fram til start, og
+går spillet tilbake til utkast, trekkes udelte mål tilbake til bunken sin så
+neste utdeling følger den nye rollefordelingen. Et mål i en bunke har ingen
+eier, og siden hver spillerspørring filtrerer på «tilhører meg», kan et
+planlagt mål ikke nå noen. Oppgaver til de Lojale deles fortsatt ut underveis.
+
+**Oppdragsoversikt.** Deltakere-fanen viser hvem som har fått oppdrag, hvem som
+har fullført dem, hvem som venter på godkjenning — og, øverst, hvem som ikke har
+fått noe i det hele tatt.
+
+**Angre en avslutning.** Et avsluttet spill kan åpnes igjen. Rollene skjules
+for spillerne på nytt, og «unnsluppet»-bonusene fjernes så de regnes ut på nytt
+neste gang spillet avsluttes. Poeng, godkjente oppdrag og avstemninger blir
+stående.
+
 **Poeng og avstemninger.** Alle scorer, ikke bare Sabotørene:
 
 | Kilde | Poeng |
