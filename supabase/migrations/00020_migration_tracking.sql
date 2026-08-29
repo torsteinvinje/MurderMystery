@@ -73,7 +73,8 @@ declare
     '00019_task_and_hint_libraries',
     '00020_migration_tracking',
     '00021_everyone_votes',
-    '00022_publish_missions'
+    '00022_publish_missions',
+    '00023_scoring_loop'
   ];
   v_version text;
 begin
