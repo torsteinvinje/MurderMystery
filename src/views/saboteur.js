@@ -1194,64 +1194,92 @@ function renderPlayer() {
   } else if (!b.my_role) {
     parts.push(`<div class="card"><p>Du har ikke fått en rolle i dette spillet.</p></div>`)
   } else {
+    // Collapsed by default, and it stays collapsed across refreshes (it has no
+    // data-panel key, so render() never re-opens it). That is the point: your
+    // phone can be handed round, or glanced at over your shoulder, without
+    // giving you away. You choose the moment you look.
     parts.push(`
-      <div class="card">
-        <p class="kicker">Din rolle — vis den ikke til noen</p>
-        <h3>${b.my_role === 'SABOTEUR' ? `${icon(I.saboteur, { lead: true })}Sabotør` : `${icon(I.loyal, { lead: true })}Lojal`}</h3>
-        <p class="lede">${b.my_role === 'SABOTEUR'
-          ? 'Du har hemmelige mål. Få dem gjennomført uten å bli avslørt.'
-          : 'Du er lojal. Gjør oppgavene dine, og finn ut hvem som saboterer.'}</p>
-        ${b.my_role === 'SABOTEUR' && b.fellow_saboteurs.length > 0
-          ? `<p><strong>Dine medsammensvorne:</strong> ${b.fellow_saboteurs.map((f) => esc(f.display_name)).join(', ')}</p>`
-          : ''}
-      </div>`)
+      <details class="editor secret">
+        <summary>${icon(I.locked, { lead: true })}Din rolle — trykk for å se den</summary>
+        <div class="card">
+          <p class="kicker">Ikke vis dette til noen</p>
+          <h3>${b.my_role === 'SABOTEUR' ? `${icon(I.saboteur, { lead: true })}Sabotør` : `${icon(I.loyal, { lead: true })}Lojal`}</h3>
+          <p class="lede">${b.my_role === 'SABOTEUR'
+            ? 'Du har hemmelige mål. Få dem gjennomført uten å bli avslørt.'
+            : 'Du er lojal. Gjør oppgavene dine, og finn ut hvem som saboterer.'}</p>
+          ${b.my_role === 'SABOTEUR' && b.fellow_saboteurs.length > 0
+            ? `<p><strong>Dine medsammensvorne:</strong> ${b.fellow_saboteurs.map((f) => esc(f.display_name)).join(', ')}</p>`
+            : ''}
+        </div>
+      </details>`)
 
-    if (b.my_role === 'SABOTEUR') {
-      parts.push(`<h2>${icon(I.objective, { lead: true })}Dine mål</h2>`)
-      parts.push(b.objectives.length === 0
-        ? '<p class="notice">Ingen mål ennå.</p>'
-        : b.objectives.map((o) => `
-            <div class="card">
-              <p class="kicker">${o.points} poeng${o.status !== 'assigned' ? ` · ${esc(ITEM_STATUS_LABEL[o.status] ?? o.status)}` : ''}</p>
-              <h3>${esc(o.title)}</h3>
-              ${o.description ? `<p>${escMultiline(o.description)}</p>` : ''}
-              ${o.status === 'assigned' ? `<button data-claim-objective="${esc(o.id)}">${icon(I.claim, { lead: true })}Jeg har gjort dette</button>` : ''}
-            </div>`).join(''))
-    } else {
-      parts.push(`<h2>${icon(I.task, { lead: true })}Dine oppgaver</h2>`)
-      parts.push(b.tasks.length === 0
-        ? '<p class="notice">Ingen oppgaver ennå.</p>'
-        : b.tasks.map((t) => `
-            <div class="card">
-              ${t.status !== 'assigned' ? `<p class="kicker">${esc(ITEM_STATUS_LABEL[t.status] ?? t.status)}</p>` : ''}
-              <h3>${esc(t.title)}</h3>
-              ${t.description ? `<p>${escMultiline(t.description)}</p>` : ''}
-              ${t.status === 'assigned' ? `<button data-claim-task="${esc(t.id)}">${icon(I.claim, { lead: true })}Jeg har gjort dette</button>` : ''}
-            </div>`).join(''))
+    // Everything below is role-revealing, so it lives behind ONE neutrally
+    // labelled control. "Dine oppdrag" reads the same whether you are a
+    // Sabotør looking at objectives or a Lojal looking at tasks — a heading
+    // saying "Dine mål" would have given the game away to anyone glancing
+    // over, which defeats the point of hiding the role card.
+    const missionCount = b.my_role === 'SABOTEUR' ? b.objectives.length : b.tasks.length
+    const missionBody = b.my_role === 'SABOTEUR'
+      ? (b.objectives.length === 0
+          ? '<p class="notice">Ingen oppdrag ennå. Verten deler ut etter hvert.</p>'
+          : b.objectives.map((o) => `
+              <div class="card">
+                <p class="kicker">${o.points} poeng${o.status !== 'assigned' ? ` · ${esc(ITEM_STATUS_LABEL[o.status] ?? o.status)}` : ''}</p>
+                <h3>${esc(o.title)}</h3>
+                ${o.description ? `<p>${escMultiline(o.description)}</p>` : ''}
+                ${o.status === 'assigned' ? `<button data-claim-objective="${esc(o.id)}">${icon(I.claim, { lead: true })}Jeg har gjort dette</button>` : ''}
+              </div>`).join(''))
+      : (b.tasks.length === 0
+          ? '<p class="notice">Ingen oppdrag ennå. Verten deler ut etter hvert.</p>'
+          : b.tasks.map((t) => `
+              <div class="card">
+                ${t.status !== 'assigned' ? `<p class="kicker">${esc(ITEM_STATUS_LABEL[t.status] ?? t.status)}</p>` : ''}
+                <h3>${esc(t.title)}</h3>
+                ${t.description ? `<p>${escMultiline(t.description)}</p>` : ''}
+                ${t.status === 'assigned' ? `<button data-claim-task="${esc(t.id)}">${icon(I.claim, { lead: true })}Jeg har gjort dette</button>` : ''}
+              </div>`).join(''))
 
-      if (b.hints.length > 0) {
-        parts.push(`
+    parts.push(`
+      <details class="editor secret">
+        <summary>${icon(I.locked, { lead: true })}Dine oppdrag${missionCount > 0 ? ` (${missionCount})` : ''} — trykk for å se</summary>
+        ${missionBody}
+      </details>`)
+
+    // Hints are Lojal-only, so the same reasoning applies: a visible "Hint"
+    // heading would mark you as not-a-Sabotør.
+    if (b.hints.length > 0) {
+      parts.push(`
+        <details class="editor secret">
+          <summary>${icon(I.hint, { lead: true })}Hint du har låst opp (${b.hints.length}) — trykk for å se</summary>
           <div class="card">
-            <p class="kicker">${icon(I.hint, { lead: true })}Hint du har låst opp</p>
-            ${b.hints.map((h) => `<p>${escMultiline(h.hint_text)}</p>`).join('')}
-          </div>`)
-      }
+            ${b.hints.map((h) => `<p>${escMultiline(h.hint_text)}</p>`).join('<hr class="divider" style="margin:12px 0;">')}
+          </div>
+        </details>`)
     }
 
+    // Everyone votes, whatever their role — a Sabotør who could not vote would
+    // stand out immediately. Kept out in the open (not folded away) because
+    // it is the one thing a player must act on while it is happening.
     if (state.voteStatus?.can_vote) {
       parts.push(`
-        <div class="card">
+        <div class="card" style="border-color: var(--accent);">
           <p class="kicker">${icon(I.ballot, { lead: true })}Avstemningen er åpen</p>
+          <h3 style="margin-top:2px;">Hvem tror du er sabotør?</h3>
+          <p class="lede">Stemmen din er hemmelig. Ingen ser den før verten avslører resultatet.</p>
           <form data-hold id="vote-form">
-            <label for="vote-target">Hvem mistenker du?</label>
+            <label for="vote-target">Velg en deltaker</label>
             <select id="vote-target" name="target">
               ${state.ballotTargets.map((t) => `<option value="${esc(t.participant_id)}">${esc(t.display_name)}</option>`).join('')}
             </select>
-            <button>${icon(I.ballot, { lead: true })}Stem</button>
+            <button>${icon(I.ballot, { lead: true })}Avgi stemme</button>
           </form>
         </div>`)
     } else if (state.voteStatus?.round_open && state.voteStatus?.already_voted) {
-      parts.push(`<div class="card"><p>${icon(I.ok, { lead: true })}Du har stemt. Vent på verten.</p></div>`)
+      parts.push(`
+        <div class="card">
+          <p>${icon(I.ok, { lead: true })}<strong>Du har stemt.</strong> Stemmen er hemmelig til
+          verten avslører resultatet.</p>
+        </div>`)
     }
   }
 

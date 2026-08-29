@@ -71,7 +71,8 @@ declare
     '00017_hint_trigger',
     '00018_delete_objectives_tasks',
     '00019_task_and_hint_libraries',
-    '00020_migration_tracking'
+    '00020_migration_tracking',
+    '00021_everyone_votes'
   ];
   v_version text;
 begin
