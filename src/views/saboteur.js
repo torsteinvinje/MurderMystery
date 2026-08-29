@@ -250,6 +250,10 @@ const RPC_MIGRATION = {
   rejoin_saboteur_game: '00013_saboteur_pins_phases.sql',
   owner_list_saboteur_games: '00012_saboteur_account.sql',
   owner_claim_saboteur_game: '00012_saboteur_account.sql',
+  host_set_objective_published: '00022_publish_missions.sql',
+  host_set_task_published: '00022_publish_missions.sql',
+  host_set_max_voting_rounds: '00023_scoring_loop.sql',
+  host_award_bonus: '00023_scoring_loop.sql',
 }
 
 function friendlyError(err, rpcName) {
@@ -844,9 +848,14 @@ function renderHostParticipants(draft) {
             <strong>${esc(p.display_name)}</strong>
             <div class="tagline">${p.role === 'SABOTEUR' ? 'Sabotør' : p.role === 'LOYAL' ? 'Lojal' : 'Ingen rolle'}${p.active ? '' : ' · inaktiv'} · ${p.points} poeng · PIN ${esc(p.pin ?? '—')}</div>
           </div>
-          <button class="btn-quiet" data-active="${esc(p.id)}" data-is-active="${p.active}">
-            ${p.active ? 'Sett inaktiv' : 'Sett aktiv'}
-          </button>
+          <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+            <button class="btn-quiet" data-active="${esc(p.id)}" data-is-active="${p.active}">
+              ${p.active ? 'Sett inaktiv' : 'Sett aktiv'}
+            </button>
+            <button class="btn-quiet" data-bonus="${esc(p.id)}" data-name="${esc(p.display_name)}">
+              ${icon(I.add, { lead: true })}Bonus
+            </button>
+          </div>
         </div>`
     })
     .join('')
@@ -1061,6 +1070,7 @@ function renderHostTasks() {
       return `
         <div class="card">
           <p class="kicker">${who ? esc(who.display_name) : '?'}
+            ${t.points === undefined ? '' : ` · ${t.points} poeng`}
             ${publishBadge(t)}
             ${t.status !== 'assigned' ? ` · <span class="badge${t.status === 'approved' ? ' ok' : t.status === 'rejected' ? ' red' : ''}">${esc(ITEM_STATUS_LABEL[t.status] ?? t.status)}</span>` : ''}
           </p>
@@ -1081,6 +1091,8 @@ function renderHostTasks() {
               <label>Tittel <input name="title" value="${esc(t.title)}" maxlength="160" required /></label>
               <label>Beskrivelse <textarea name="description">${esc(t.description ?? '')}</textarea></label>
               <label>Hint <textarea name="hint_text">${esc(t.hint_text ?? '')}</textarea></label>
+              ${t.points === undefined ? '' : `
+              <label>Poeng <input name="points" type="number" min="0" max="20" value="${esc(t.points)}" /></label>`}
               <label>Hvem får hintet?
                 <select name="hint_audience">
                   <option value="assignee" ${t.hint_audience === 'assignee' ? 'selected' : ''}>Bare denne spilleren</option>
@@ -1144,6 +1156,7 @@ function renderHostTasks() {
           </label>
           <label>Tittel <input name="title" maxlength="160" required placeholder="F.eks. «Få gruppa til å le uten å forklare hvorfor»" /></label>
           <label>Beskrivelse (valgfritt) <textarea name="description"></textarea></label>
+          <label>Poeng <input name="points" type="number" min="0" max="20" value="2" /></label>
           <label>Hint som låses opp
             <textarea name="hint_text"
               placeholder="La stå tom for å gi et tilfeldig hintkort ved godkjenning"></textarea>
@@ -1178,12 +1191,24 @@ function renderHostTasks() {
 function renderHostVoting() {
   const g = state.game
   const round = g.current_round
+  const used = g.rounds_used ?? 0
+  const max = g.max_voting_rounds ?? 1
+  const unsettled = g.unsettled_objectives ?? 0
 
   let body
   if (!round || round.status === 'revealed') {
-    body = g.status === 'active'
-      ? `<button id="open-round-btn">${icon(I.ballot, { lead: true })}Åpne avstemning</button>`
-      : `<p class="lede">Spillet må være aktivt for å åpne en avstemning.</p>`
+    if (g.status !== 'active') {
+      body = `<p class="lede">Spillet må være aktivt for å åpne en avstemning.</p>`
+    } else if (used >= max) {
+      body = `<p class="lede">Alle ${max} avstemningsrunde(r) er brukt. Avslutt spillet for å vise rollene.</p>`
+    } else if (unsettled > 0) {
+      // Objectives settle before the vote, so scores are final when people
+      // commit — and nobody votes while a sabotage could still change.
+      body = `<p class="error">${icon(I.warn, { lead: true })}${unsettled} sabotørmål er ikke ferdig.
+        Godkjenn eller avslå dem i Verkstedet først (eller trekk dem tilbake), så kan avstemningen åpnes.</p>`
+    } else {
+      body = `<button id="open-round-btn">${icon(I.ballot, { lead: true })}Åpne avstemning (runde ${used + 1} av ${max})</button>`
+    }
   } else if (round.status === 'open') {
     body = `
       <p>${icon(I.ballot, { lead: true })}${round.ballot_count} stemme(r) avgitt.
@@ -1202,9 +1227,31 @@ function renderHostVoting() {
       </table>`
     : ''
 
+  const reasons = round?.status === 'revealed' && round.reasons?.length > 0
+    ? `<h3>${icon(I.briefing, { lead: true })}Begrunnelser — les dem høyt</h3>
+       ${round.reasons.map((r) => `
+         <div class="card">
+           <p class="kicker">${esc(r.voter)} stemte på ${esc(r.target)}</p>
+           <p>${escMultiline(r.reason)}</p>
+         </div>`).join('')}`
+    : ''
+
   return `
     <h2>${icon(I.ballot, { lead: true })}Avstemning</h2>
-    <div class="card">${body}${tally}</div>`
+    <div class="card">
+      <p class="kicker">Runder</p>
+      <p class="lede">Hvor mange ganger skal dere stemme i løpet av kvelden?
+      Brukt: ${used} av ${max}.</p>
+      <form data-hold id="rounds-form">
+        <label for="max-rounds">Antall avstemningsrunder</label>
+        <select id="max-rounds" name="rounds">
+          ${[1, 2, 3].map((n) => `<option value="${n}" ${n === max ? 'selected' : ''}>${n}</option>`).join('')}
+        </select>
+        <button ${state.pending ? 'disabled' : ''}>${icon(I.save, { lead: true })}Lagre</button>
+      </form>
+    </div>
+    <div class="card">${body}${tally}</div>
+    ${reasons}`
 }
 
 // --- Player "my brief" -------------------------------------------------------
@@ -1230,6 +1277,7 @@ function renderPlayer() {
       <p>${esc(saboteurPhase(b.phase).player)}</p>
     </div>
 
+    ${renderPlayerPulse(b)}
     ${renderPlayerAnnouncements(b)}
     ${renderPlayerIntro(b)}`]
 
@@ -1338,6 +1386,9 @@ function renderPlayer() {
             <select id="vote-target" name="target">
               ${state.ballotTargets.map((t) => `<option value="${esc(t.participant_id)}">${esc(t.display_name)}</option>`).join('')}
             </select>
+            <label for="vote-reason">Hvorfor? (valgfritt)</label>
+            <textarea id="vote-reason" name="reason" maxlength="300"
+              placeholder="Verten leser begrunnelsene høyt ved avsløringen"></textarea>
             <button>${icon(I.ballot, { lead: true })}Avgi stemme</button>
           </form>
         </div>`)
@@ -1357,6 +1408,26 @@ function renderPlayer() {
     </footer>`)
 
   return parts.join('')
+}
+
+// A public pulse: how much has actually happened, how you are scoring, and
+// how many people have pointed at you. None of it reveals anyone's role — the
+// counter is a total, and your own vote count is only ever your own.
+function renderPlayerPulse(b) {
+  if (b.status === 'draft') return ''
+  const votes = b.votes_against_me ?? 0
+  return `
+    <div class="card">
+      <p class="kicker">Kvelden så langt</p>
+      <p>
+        ${icon(I.ok, { lead: true })}<strong>${b.completed_count ?? 0}</strong> oppdrag fullført ·
+        ${icon(I.tally, { lead: true })}<strong>${b.my_points ?? 0}</strong> poeng til deg
+        ${votes > 0 ? ` · ${icon(I.ballot, { lead: true })}<strong>${votes}</strong> stemme(r) mot deg` : ''}
+      </p>
+      ${votes > 0
+        ? `<p class="hint">Noen har pekt på deg. Det kan være verdt å endre oppførsel — eller spille på det.</p>`
+        : ''}
+    </div>`
 }
 
 // The rules of engagement. Open by default while people are still waiting to
@@ -1384,32 +1455,101 @@ function renderPlayerAnnouncements(b) {
     </div>`
 }
 
+const SOURCE_LABEL = {
+  objective: 'Fullførte mål',
+  task: 'Fullførte oppdrag',
+  correct_vote: 'Riktige stemmer',
+  undetected: 'Unnsluppet',
+  adjustment: 'Bonus fra verten',
+}
+
 function renderPlayerReveal(b) {
-  const rows = b.reveal.participants
+  const r = b.reveal
+  const teams = r.team_scores || {}
+  const sabTotal = teams.SABOTEUR ?? 0
+  const loyalTotal = teams.LOYAL ?? 0
+  const winner = sabTotal === loyalTotal
+    ? 'Uavgjort!'
+    : sabTotal > loyalTotal ? 'Sabotørene vant kvelden' : 'De lojale vant kvelden'
+
+  const rows = r.participants
     .map((p) => `
       <div class="suspect-row">
-        <div class="who"><strong>${esc(p.display_name)}</strong></div>
+        <div class="who">
+          <strong>${esc(p.display_name)}</strong>
+          <div class="tagline">${p.points} poeng${p.votes_received > 0 ? ` · ${p.votes_received} stemme(r) mot` : ''}</div>
+        </div>
         <span class="badge${p.role === 'SABOTEUR' ? ' red' : ' ok'}">${p.role === 'SABOTEUR' ? 'Sabotør' : p.role === 'LOYAL' ? 'Lojal' : 'Ingen rolle'}</span>
       </div>`)
     .join('')
 
-  const score = b.reveal.leaderboard
-    ? `<table class="tally">
-        <thead><tr><th>Spiller</th><th>Poeng</th></tr></thead>
-        <tbody>${b.reveal.leaderboard.map((x) => `<tr><td>${esc(x.display_name)}</td><td>${x.points}</td></tr>`).join('')}</tbody>
-      </table>`
-    : `<p class="lede">Dine poeng: <strong>${esc(b.reveal.my_points)}</strong></p>`
+  // The payoff: what the Sabotører were actually up to all evening. This is
+  // the "so THAT is why you kept asking about rundkjøringer" moment, and it
+  // is the whole reason the game is fun to look back on.
+  const missions = (r.saboteur_objectives || []).length === 0
+    ? ''
+    : `<h2>${icon(I.objective, { lead: true })}Hva sabotørene egentlig drev med</h2>
+       ${r.saboteur_objectives.map((o) => `
+         <div class="card">
+           <p class="kicker">${esc(o.saboteur)} · ${o.points} poeng ·
+             <span class="badge${o.status === 'approved' ? ' ok' : ''}">${o.status === 'approved' ? 'Klarte det' : esc(ITEM_STATUS_LABEL[o.status] ?? o.status)}</span>
+           </p>
+           <p>${esc(o.title)}</p>
+         </div>`).join('')}`
+
+  const honours = `
+    <div class="btn-row" style="gap:10px;">
+      ${r.top_saboteur ? `<div class="card" style="flex:1; min-width:200px;">
+        <p class="kicker">${icon(I.saboteur, { lead: true })}Kveldens sabotør</p>
+        <h3 style="margin:2px 0;">${esc(r.top_saboteur.display_name)}</h3>
+        <p class="lede">${r.top_saboteur.points} poeng</p>
+      </div>` : ''}
+      ${r.top_loyal ? `<div class="card" style="flex:1; min-width:200px;">
+        <p class="kicker">${icon(I.clue, { lead: true })}Kveldens etterforsker</p>
+        <h3 style="margin:2px 0;">${esc(r.top_loyal.display_name)}</h3>
+        <p class="lede">${r.top_loyal.points} poeng</p>
+      </div>` : ''}
+    </div>`
+
+  const breakdown = Object.entries(r.my_breakdown || {})
+  const myScore = `
+    <div class="card">
+      <p class="kicker">Dine poeng</p>
+      <h3 style="margin:2px 0;">${esc(r.my_points)}</h3>
+      ${breakdown.length > 0
+        ? `<table class="tally">
+            <tbody>${breakdown.map(([k, v]) => `<tr><td>${esc(SOURCE_LABEL[k] ?? k)}</td><td>${v}</td></tr>`).join('')}</tbody>
+          </table>`
+        : ''}
+    </div>`
+
+  const leaderboard = r.leaderboard
+    ? `<h2>${icon(I.tally, { lead: true })}Poengtavle</h2>
+       <table class="tally">
+         <thead><tr><th>Spiller</th><th>Poeng</th></tr></thead>
+         <tbody>${r.leaderboard.map((x) => `<tr><td>${esc(x.display_name)}</td><td>${x.points}</td></tr>`).join('')}</tbody>
+       </table>`
+    : ''
 
   return `
     <header class="case-header">
       <div class="case-no"><span class="brand">${icon(I.saboteur, { lead: true })}Skjult agenda</span><span>${esc(b.my_name)}</span></div>
       <h1>${esc(b.title)}</h1>
     </header>
+
     <div class="reveal-card">
-      <span class="stamp">${icon(I.reveal, { lead: true })}Rollene er avslørt</span>
+      <span class="stamp">${icon(I.reveal, { lead: true })}${esc(winner)}</span>
+      <p class="lede" style="margin-top:10px;">
+        Sabotørene ${sabTotal} — ${loyalTotal} De lojale
+      </p>
       ${rows}
     </div>
-    ${score}
+
+    ${honours}
+    ${myScore}
+    ${missions}
+    ${leaderboard}
+
     <footer class="app-footer">
       <span>Skjult agenda</span>
       <a href="#" id="leave-link">${icon(I.leave, { lead: true })}Avslutt</a>
@@ -1532,6 +1672,34 @@ function wireEvents() {
       })
     )
   )
+  // Free-form points, for the moments no rule anticipated: a brilliant bluff,
+  // a joke that landed, a player who kept the evening moving.
+  app.querySelectorAll('[data-bonus]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const raw = prompt(`Hvor mange bonuspoeng til ${btn.dataset.name}? (negativt tall trekker fra)`, '1')
+      if (raw === null) return
+      const points = Number(raw)
+      if (!Number.isInteger(points) || points === 0) {
+        state.error = 'Skriv et helt tall som ikke er 0'
+        render()
+        return
+      }
+      const note = prompt('Kort begrunnelse (valgfritt)', '') || null
+      hostAction('host_award_bonus', {
+        p_participant_id: btn.dataset.bonus,
+        p_points: points,
+        p_note: note,
+      }, `${points > 0 ? '+' : ''}${points} poeng til ${btn.dataset.name}`)
+    })
+  )
+
+  bind('#rounds-form', 'submit', (e) => {
+    e.preventDefault()
+    hostAction('host_set_max_voting_rounds', {
+      p_rounds: Number(e.target.elements.rounds.value),
+    }, 'Antall avstemninger lagret')
+  })
+
   bind('#auto-assign-btn', 'click', () => {
     const count = Number(app.querySelector('#auto-assign-count')?.value) || 1
     hostAction('host_auto_assign_roles', { p_saboteur_count: count }, 'Roller delt ut')
@@ -1631,6 +1799,7 @@ function wireEvents() {
         p_description: f.description.value,
         p_hint_text: f.hint_text.value,
         p_hint_audience: f.hint_audience.value,
+        p_points: f.points ? Number(f.points.value) : null,
       }, 'Lagret')
     })
   )
@@ -1660,6 +1829,7 @@ function wireEvents() {
       p_hint_text: f.hint_text.value,
       p_hint_audience: f.hint_audience.value,
       p_trigger_objective_id: f.trigger_objective_id?.value || null,
+      p_points: Number(f.points.value) || 0,
     }, f.publish_now.checked, 'task', 'Oppgave publisert')
   })
   app.querySelectorAll('[data-clear-trigger]').forEach((btn) =>
@@ -1713,6 +1883,7 @@ function wireEvents() {
     playerAction('cast_saboteur_ballot', {
       p_round_id: state.voteStatus?.round_id,
       p_target_participant_id: e.target.elements.target.value,
+      p_reason: e.target.elements.reason?.value || null,
     }, 'Stemme avgitt')
   })
 }

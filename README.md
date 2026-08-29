@@ -116,6 +116,23 @@ mål til Sabotørene og oppgaver til de Lojale, godkjenner det folk melder inn,
 åpner avstemning når det passer — og avslutter spillet, som er det eneste som
 avslører rollene.
 
+**Poeng og avstemninger.** Alle scorer, ikke bare Sabotørene:
+
+| Kilde | Poeng |
+| --- | --- |
+| Fullført sabotørmål | verten setter verdien (standard 2) |
+| Fullført lojal oppgave | verten setter verdien (standard 2) |
+| Riktig stemme (Lojal peker på en Sabotør) | 3 |
+| Unnsluppet (Sabotør, ved spillslutt) | `5 − antall stemmer mot`, aldri under 0 |
+| Vertens bonus | fritt, ±50, med begrunnelse |
+
+Verten velger **1–3 avstemningsrunder**. En runde kan ikke åpnes mens et
+publisert sabotørmål fortsatt er uavgjort — bevisene skal være inne før noen
+peker. Spillere kan skrive en kort **begrunnelse** med stemmen; den er skjult
+til runden avsløres, og da leses den høyt. Ved spillslutt viser
+avsløringsskjermen lagresultatet, hva Sabotørene faktisk holdt på med, og
+kveldens sabotør og etterforsker.
+
 **Av som standard, overalt, på to nivåer:**
 
 1. Klient: `VITE_SABOTEUR_GAME_ENABLED=true` i `.env` (bygges inn — se

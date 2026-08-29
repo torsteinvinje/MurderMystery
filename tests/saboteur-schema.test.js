@@ -506,6 +506,68 @@ describe('Skjult agenda migration — security invariants', () => {
     expect(hostGet).toMatch(/'published', t\.published/)
   })
 
+  it('the scoring loop pays out from every source, exactly once', () => {
+    const sc = read('supabase/migrations/00023_scoring_loop.sql')
+
+    // Every way to earn a point is a recognised source_type.
+    expect(sc).toMatch(/check \(source_type in \('objective', 'task', 'correct_vote', 'undetected', 'adjustment'\)\)/)
+
+    // Correct votes only pay LOYAL voters who picked an actual Sabotør, and
+    // the ledger's partial unique index is what stops a double payout.
+    const reveal = sc.match(/create or replace function host_reveal_voting_round[\s\S]*?\nend \$\$;/i)[0]
+    expect(reveal).toMatch(/voter\.role = 'LOYAL'/)
+    expect(reveal).toMatch(/target\.role = 'SABOTEUR'/)
+    expect(reveal).toMatch(/on conflict \(source_type, source_id\)[\s\S]{0,60}do nothing/)
+
+    // The undetected bonus shrinks with every vote received, and never goes
+    // negative — a Sabotør everyone voted for still scores 0, not minus.
+    expect(sc).toMatch(/greatest\(0, 5 - /)
+
+    // Host bonuses are the one source that may repeat, so they carry a null
+    // source_id (the unique index only covers non-null ones) and are capped.
+    const bonus = sc.match(/create or replace function host_award_bonus[\s\S]*?\nend \$\$;/i)[0]
+    expect(bonus).toMatch(/'adjustment', null/)
+    expect(bonus).toMatch(/abs\(p_points\) > 50/)
+  })
+
+  it('voting cannot open while sabotørmål are still unsettled', () => {
+    const sc = read('supabase/migrations/00023_scoring_loop.sql')
+    const open = sc.match(/create or replace function host_open_voting_round[\s\S]*?\nend \$\$;/i)[0]
+    // Published-but-undecided objectives block the round: the whole point is
+    // that the evidence is in before anyone points a finger.
+    expect(open).toMatch(/published and status in \('assigned', 'claimed'\)/)
+    expect(open).toMatch(/if v_unsettled > 0 then/)
+    // And the host-chosen round limit is enforced server-side, not just in UI.
+    expect(open).toMatch(/max_voting_rounds/)
+    expect(sc).toMatch(/create or replace function host_set_max_voting_rounds/i)
+    expect(sc).toMatch(/saboteur_games_max_rounds_check[\s\S]{0,120}between 1 and 3/)
+  })
+
+  it('vote reasons stay hidden until the round is revealed', () => {
+    const sc = read('supabase/migrations/00023_scoring_loop.sql')
+    const hostGet = sc.match(/create or replace function host_get_saboteur_game[\s\S]*?\nend \$\$;/i)[0]
+    // Reading someone's reason early would expose who suspects whom.
+    expect(hostGet).toMatch(/'reasons', case when v_round\.status = 'revealed' then/)
+    // And a player's own screen only ever counts votes against them, and only
+    // from rounds already revealed.
+    const brief = sc.match(/create or replace function get_my_saboteur_brief[\s\S]*?\nend \$\$;/i)[0]
+    expect(brief).toMatch(/votes_against_me/)
+    expect(brief).toMatch(/r\.status = 'revealed'/)
+    // The brief must never hand a player anyone else's role before the end.
+    const beforeReveal = brief.slice(0, brief.indexOf("'reveal'"))
+    expect(beforeReveal).not.toMatch(/'role', /)
+  })
+
+  it('every migration is registered so missing_migrations() can spot it', () => {
+    const known = read('supabase/migrations/00020_migration_tracking.sql')
+    expect(known).toMatch(/'00023_scoring_loop'/)
+    // The down-migration must undo the new signatures, or a rollback leaves
+    // two ambiguous overloads behind.
+    const down = read('supabase/migrations/00023_scoring_loop_down.sql')
+    expect(down).toMatch(/drop function if exists cast_saboteur_ballot\(uuid, uuid, uuid, text\)/)
+    expect(down).toMatch(/drop function if exists host_upsert_task\(uuid, uuid, uuid, text, text, text, text, uuid, int\)/)
+  })
+
   it('canonical supabase-schema.sql matches the standalone model', () => {
     expect(schemaFile).toMatch(/SABOTEUR_GAME_ENABLED/)
     expect(schemaFile).toMatch(/create or replace function create_saboteur_game\(/i)
